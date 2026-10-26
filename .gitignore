@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+output/arm/frames/
+output/**/_*.png
+*.egg-info/
+.venv/
