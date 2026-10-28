@@ -90,11 +90,12 @@ def make_shoulder_bracket(b: BaseJointParams, p2: ShoulderParams) -> cq.Workplan
     pl = (cq.Workplane("XZ").center(0, h / 2).rect(b.bracket_w, h).extrude(-b.bracket_t)
           .edges("|Y").fillet(10))
     zc = b.shoulder_rise
-    pl = pl.faces(">Y").workplane().center(0, zc).circle(20).cutThruAll()          # 모터 보스 Ø38.1
-    pl = (pl.faces(">Y").workplane().center(0, zc)
+    # 구멍 기준은 터릿 상면 원점 — .center(0, h/2) 원점을 상속하지 않도록 origin 명시
+    pl = pl.faces(">Y").workplane(origin=(0, 0, 0)).center(0, zc).circle(20).cutThruAll()   # 모터 보스 Ø38.1
+    pl = (pl.faces(">Y").workplane(origin=(0, 0, 0)).center(0, zc)
           .pushPoints([(23.57, 23.57), (-23.57, 23.57), (23.57, -23.57), (-23.57, -23.57)])
           .circle(2.6).cutThruAll())
-    pl = pl.faces(">Y").workplane().center(0, zc + b.gs_h).circle(4.1).cutThruAll()  # 가스 스프링 앵커 M8
+    pl = pl.faces(">Y").workplane(origin=(0, 0, 0)).center(0, zc + b.gs_h).circle(4.1).cutThruAll()  # 가스 스프링 앵커 M8
     # 거셋 (양측, 삼각 12t)
     g = (cq.Workplane("XY").polyline([(0, 0), (60, 0), (0, 120)]).close().extrude(b.bracket_t))
     gL = g.rotate((0, 0, 0), (0, 0, 1), 90).translate((b.bracket_w / 2 - b.bracket_t, b.bracket_t, 0))
@@ -110,7 +111,8 @@ def make_j1_drive(b: BaseJointParams) -> cq.Workplane:
     gb = cq.Workplane("XY").circle(b.gearbox_d / 2).extrude(-b.gearbox_len)
     motor = (cq.Workplane("XY").rect(57, 57).extrude(-b.motor_len).edges("|Z").chamfer(5)
              .translate((0, 0, -b.gearbox_len)))
-    shaft = cq.Workplane("XY").circle(7).extrude(b.plate_t + 4 + b.bearing[2] + b.turret_t + 2)
+    # 출력축 상단 = 터릿 상면 (build_j1 의 z_turret + turret_t 와 동일 적층)
+    shaft = cq.Workplane("XY").circle(7).extrude(b.plate_t - 4 + b.bearing[2] + 2 + b.turret_t)
     return gb.union(motor).union(shaft)
 
 

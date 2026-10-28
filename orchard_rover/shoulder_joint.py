@@ -57,6 +57,22 @@ class CycloidParams:
         """디스크 출력 홀 지름 = 핀 지름 + 2e."""
         return self.d_out_pin + 2 * self.ecc
 
+    @property
+    def disc2_phase(self) -> float:
+        """2번 디스크 회전각(deg) — 로브 반 피치 위상과 출력 홀 정렬을 동시에 만족.
+
+        180° 편심 위치의 디스크는 로브가 반 피치(180/비) 어긋나야 링 핀과 맞물린다.
+        출력 홀 피치의 배수 중 로브 피치로 나눈 나머지가 반 피치인 각을 쓰면
+        같은 부품을 돌려 끼우는 것만으로 홀이 출력 핀에 정렬된다.
+        """
+        lobe = 360.0 / self.ratio
+        for k in range(self.n_out_pins):
+            a = k * 360.0 / self.n_out_pins
+            if abs(math.remainder(a - lobe / 2, lobe)) < 1e-6:
+                return a
+        raise ValueError(f"출력 핀 {self.n_out_pins}개·로브 {self.ratio}개 조합은 동일 디스크 2장으로 "
+                         "위상과 홀 정렬을 동시에 만족할 수 없음")
+
 
 @dataclass
 class ShoulderParams:
@@ -148,7 +164,8 @@ def make_eccentric_cam(c: CycloidParams, shaft_d: float) -> cq.Workplane:
     j2 = (cq.Workplane("XY").center(-c.ecc, 0).circle(15.0).extrude(c.disc_t)
           .translate((0, 0, c.disc_t)))
     cam = j1.union(j2)
-    cam = cam.faces(">Z").workplane().circle(shaft_d / 2 + 0.01).cutThruAll()
+    # 보어는 모터 축(원점) 기준 — j1 의 .center(ecc) 원점을 상속하지 않도록 origin 명시
+    cam = cam.faces(">Z").workplane(origin=(0, 0, 0)).circle(shaft_d / 2 + 0.01).cutThruAll()
     return cam
 
 
@@ -250,7 +267,7 @@ def build(p: ShoulderParams) -> Tuple[cq.Assembly, Dict[str, cq.Workplane]]:
     asm.add(parts["ring_housing"].translate((0, 0, z_disc0 - 1)), name="ring", color=cq.Color(0.55, 0.55, 0.6))
     asm.add(parts["eccentric_cam"].translate((0, 0, z_disc0)), name="cam", color=cq.Color(0.85, 0.7, 0.1))
     d1 = parts["cycloid_disc"].translate((c.ecc, 0, z_disc0))
-    d2 = parts["cycloid_disc"].rotate((0, 0, 0), (0, 0, 1), 180 / c.ratio).translate((-c.ecc, 0, z_disc0 + c.disc_t))
+    d2 = parts["cycloid_disc"].rotate((0, 0, 0), (0, 0, 1), c.disc2_phase).translate((-c.ecc, 0, z_disc0 + c.disc_t))
     asm.add(d1, name="disc1", color=cq.Color(0.85, 0.3, 0.3))
     asm.add(d2, name="disc2", color=cq.Color(0.95, 0.5, 0.2))
     z_fl = z_disc0 + 2 * c.disc_t + 2

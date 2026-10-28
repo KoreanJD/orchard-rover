@@ -44,7 +44,7 @@ def iso9409_flange(d: float = 63.0, t: float = 8.0) -> cq.Workplane:
     pts = [(25 * math.cos(math.radians(a)), 25 * math.sin(math.radians(a))) for a in (45, 135, 225, 315)]
     fl = fl.faces(">X").workplane().pushPoints(pts).circle(2.5).cutThruAll()        # M6 탭 (하경)
     fl = fl.faces(">X").workplane().center(0, 25).circle(3.0).cutBlind(-6)          # 위치핀 Ø6
-    fl = fl.faces(">X").workplane().circle(31.5 / 2).cutBlind(-3)                   # 센터링 리세스
+    fl = fl.faces(">X").workplane(origin=(0, 0, 0)).circle(31.5 / 2).cutBlind(-3)   # 센터링 리세스 (축 중심)
     return fl
 
 
@@ -90,10 +90,15 @@ def build_wrist(w: WristParams) -> Dict[str, Tuple[cq.Workplane, cq.Color]]:
     yoke = (cq.Workplane("YZ").circle(w.tube_d / 2).extrude(14).translate((yoke_x0, 0, 0)))
     arm_w = 12.0
     for sgn in (+1, -1):
+        # XZ 압출(-arm_w)은 +Y 방향 → 치크 Y ∈ [y0, y0 + arm_w], 블록 측면에서 2 띄움
+        y0 = w.wrist_block[1] / 2 + 2 if sgn > 0 else -(w.wrist_block[1] / 2 + 2) - arm_w
         cheek = (cq.Workplane("XZ").center(xc5 - 15, 0).rect(w.j5_yoke_len + 10, 60).extrude(-arm_w)
                  .edges("|Y").fillet(8)
-                 .translate((0, sgn * (w.wrist_block[1] / 2 + 2) + (arm_w if sgn > 0 else 0), 0)))
+                 .translate((0, y0, 0)))
         yoke = yoke.union(cheek)
+    # 반대편(−Y) 치크에 지지 베어링(6001, OD 28) 자리
+    yoke = yoke.cut(cq.Workplane("XZ").circle(14).extrude(arm_w + 2)
+                    .translate((xc5, -(w.wrist_block[1] / 2 + 2) + 1, 0)))
     s["j5_yoke"] = (yoke, COL["housing"])
     # J5 모터: 요크 한쪽 바깥에 Y 방향, 감속기 출력이 축 핀
     m5 = (cq.Workplane("XZ").rect(NEMA17, NEMA17).extrude(-48)          # Y 0→+48

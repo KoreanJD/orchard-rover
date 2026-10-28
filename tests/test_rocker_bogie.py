@@ -145,7 +145,7 @@ def test_wheels_touch_ground(params: SuspensionParams) -> None:
 # ---------------------------------------------------------------------------
 def test_misumi_standard_sizes(params: SuspensionParams) -> None:
     """축경/휠이 MISUMI 표준 사이즈여야 한다."""
-    assert params.rocker_shaft_d in BEARINGS
+    assert params.rocker_journal_d in BEARINGS          # 베어링 내경 = 축 저널경
     assert params.bogie_shaft_d in BEARINGS
     assert params.wheel_d in WHEELS
     assert WHEELS[params.wheel_d]["bore"] == params.axle_d

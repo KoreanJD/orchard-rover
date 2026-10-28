@@ -91,7 +91,7 @@ def make_rocker_plate(p: SuspensionParams) -> cq.Workplane:
     """
     pts = p.side_points()
     w, t = p.arm_w, p.plate_t
-    brg = BEARINGS[p.rocker_shaft_d]
+    brg = BEARINGS[p.rocker_journal_d]
     segs = [(pts["P"], pts["F"]), (pts["P"], pts["B"]), (pts["P"], pts["U"])]
     bosses = [(pts["P"], brg["od"] + 20), (pts["F"], w), (pts["B"], w), (pts["U"], w)]
     plate = _plate_from_bars(segs, w, t, bosses)
@@ -159,10 +159,18 @@ def make_shaft_collar(p: SuspensionParams) -> cq.Workplane:
 
 
 def make_rocker_shaft(p: SuspensionParams) -> cq.Workplane:
-    """로커 피벗 축 SFJ16 — 브라켓 + 베어링 보스 + 스냅링 여유."""
-    brg = BEARINGS[p.rocker_shaft_d]
-    length = p.pivot_block_t + p.block_gap + 2 * brg["width"] + 6 + 12
-    return cq.Workplane("XZ").circle(p.rocker_shaft_d / 2).extrude(-length)
+    """로커 피벗 단붙이 축 — SHF16 클램프 Ø16 | 6003ZZ 저널 Ø17 | SCS16 칼라 Ø16.
+
+    베어링은 바깥쪽 Ø16 끝으로 넘겨 끼우고, 안쪽 단차가 내측 베어링 내륜을 받친다.
+    """
+    brg = BEARINGS[p.rocker_journal_d]
+    l_in = p.pivot_block_t + p.block_gap
+    l_brg = 2 * brg["width"] + 6
+    length = l_in + l_brg + 12
+    shaft = cq.Workplane("XZ").circle(p.rocker_shaft_d / 2).extrude(-length)
+    journal = (cq.Workplane("XZ").circle(p.rocker_journal_d / 2).extrude(-l_brg)
+               .translate((0, l_in, 0)))
+    return shaft.union(journal)
 
 
 def make_bogie_shaft(p: SuspensionParams) -> cq.Workplane:
@@ -327,7 +335,7 @@ def _side(p: SuspensionParams, side: float, theta: float,
     # --- 프레임 고정부 ---
     shapes["pivot_block"] = (parts["pivot_block"].translate((px, p.frame_half_w, pz)), COLORS["frame"])
     shapes["rocker_shaft"] = (parts["rocker_shaft"].translate((px, p.frame_half_w, pz)), COLORS["pivot"])
-    y_collar = d["y_rocker_in"] + p.plate_t + (2 * BEARINGS[p.rocker_shaft_d]["width"] + 6 - p.plate_t) + 1
+    y_collar = d["y_rocker_in"] + p.plate_t + (2 * BEARINGS[p.rocker_journal_d]["width"] + 6 - p.plate_t) + 1
     shapes["shaft_collar"] = (parts["shaft_collar"].translate((px, y_collar, pz)), COLORS["pivot"])
 
     sub = cq.Assembly(name=f"suspension_{tag}")
@@ -347,7 +355,7 @@ def build_assembly(p: SuspensionParams, theta_left: float = 0.0) -> cq.Assembly:
     """
     phi, theta_right = (0.0, 0.0) if abs(theta_left) < 1e-9 else p.differential_response(theta_left)
     d = p.derived
-    brg16, brg12 = BEARINGS[p.rocker_shaft_d], BEARINGS[p.bogie_shaft_d]
+    brg16, brg12 = BEARINGS[p.rocker_journal_d], BEARINGS[p.bogie_shaft_d]
 
     parts: Dict[str, cq.Workplane] = {
         "rocker_plate": make_rocker_plate(p),

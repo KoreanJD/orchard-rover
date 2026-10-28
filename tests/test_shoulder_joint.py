@@ -70,6 +70,35 @@ def test_disc_is_valid_solid(p: ShoulderParams) -> None:
     assert 0.8 * expected < d.Volume() < 1.1 * expected
 
 
+def test_disc2_phase_aligns_lobes_and_output_holes() -> None:
+    """2번 디스크 회전각: 로브 반 피치 위상 + 출력 홀 피치 배수 (J2 90°, J3 180°)."""
+    from orchard_rover.shoulder_joint import elbow_params
+
+    for c, expected in ((ShoulderParams().cyc, 90.0), (elbow_params().cyc, 180.0)):
+        a, lobe = c.disc2_phase, 360.0 / c.ratio
+        assert a == pytest.approx(expected)
+        assert math.remainder(a, 360.0 / c.n_out_pins) == pytest.approx(0.0, abs=1e-9)
+        assert abs(math.remainder(a, lobe)) == pytest.approx(lobe / 2)
+
+
+def test_cam_bore_on_motor_axis(p: ShoulderParams) -> None:
+    """캠 보어 중심 = 모터 축(원점), 두 로브는 ±e."""
+    from OCP.BRepAdaptor import BRepAdaptor_Surface
+
+    from orchard_rover.shoulder_joint import make_eccentric_cam
+
+    cam = make_eccentric_cam(p.cyc, p.motor_shaft_d).val()
+    cyls = []
+    for f in cam.Faces():
+        if f.geomType() == "CYLINDER":
+            c = BRepAdaptor_Surface(f.wrapped).Cylinder()
+            cyls.append((c.Radius(), c.Location().X(), c.Location().Y()))
+    bore = [(x, y) for r, x, y in cyls if r < 5]
+    lobes = sorted(x for r, x, y in cyls if r == pytest.approx(15.0))
+    assert bore and all(math.hypot(x, y) < 1e-6 for x, y in bore)
+    assert lobes == pytest.approx([-p.cyc.ecc, p.cyc.ecc])
+
+
 def test_elbow_params_valid() -> None:
     """J3: 1:40, 핀 간격 확보, 출력 홀이 디스크 안쪽."""
     from orchard_rover.shoulder_joint import elbow_params
@@ -94,6 +123,18 @@ def test_arm_assembly_axes() -> None:
     names = {ch.name for ch in asm.children}
     assert {"J2_output_flange", "J3_output_flange", "upper_plate_J2", "upper_plate_J3",
             "j4_housing", "forearm_tube", "j5_yoke", "wrist_block", "j6_gear", "iso_flange"} <= names
+
+
+def test_arm_mating_faces_flush() -> None:
+    """체결면 밀착: J2 플랜지↔상완 측판, 측판↔J3 어댑터, J3 플랜지↔전완판 (Y 간격 0)."""
+    from orchard_rover.arm_assembly import build_arm
+
+    bb = {ch.name: ch.obj.val().BoundingBox() for ch in build_arm().children}
+    assert bb["upper_plate_J2"].ymax == pytest.approx(bb["J2_output_flange"].ymin, abs=1e-6)
+    assert bb["J3_adapter"].ymax == pytest.approx(bb["upper_plate_J3"].ymin, abs=1e-6)
+    assert bb["fore_plate_J3"].ymin == pytest.approx(bb["J3_output_flange"].ymax, abs=1e-6)
+    # 레일은 측판 +Y 면에 밀착
+    assert bb["upper_rail_0"].ymin == pytest.approx(bb["upper_plate_J2"].ymax, abs=1e-6)
 
 
 def test_full_robot_integration() -> None:

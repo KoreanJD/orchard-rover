@@ -47,6 +47,16 @@ def _joint_shapes(p: ShoulderParams, rot_deg: float, origin: tuple) -> Dict[str,
     return out
 
 
+def _cut_y(plate: cq.Workplane, pts, d: float) -> cq.Workplane:
+    """XZ 좌표(X, Z) 점들에 Y 방향 관통 구멍(지름 d)을 뚫는다.
+
+    faces(">Y").workplane() 은 .center() 로 옮긴 원점을 상속하고 로컬 x 가 −X 로 잡혀
+    구멍이 판 밖으로 나갔었음 → XZ 평면 커터로 월드 좌표를 직접 지정한다.
+    """
+    cutter = cq.Workplane("XZ").pushPoints(pts).circle(d / 2).extrude(100, both=True)
+    return plate.cut(cutter)
+
+
 def make_upper_arm(p2: ShoulderParams, p3: ShoulderParams, y_plate: float) -> Dict[str, tuple]:
     """상완 링크: 레일 2본 + J2 측판 + J3 측판 + 가스 스프링 앵커 브라켓."""
     shapes: Dict[str, tuple] = {}
@@ -62,22 +72,20 @@ def make_upper_arm(p2: ShoulderParams, p3: ShoulderParams, y_plate: float) -> Di
     p_j2 = (cq.Workplane("XZ").center(90, 0).rect(240, plate_h).extrude(-PLATE_T)
             .edges("|Y").fillet(10))
     p_j2 = p_j2.union(cq.Workplane("XZ").circle(plate_h / 2).extrude(-PLATE_T))
-    p_j2 = p_j2.faces(">Y").workplane().circle(p2.output_bearing[0] / 2 - 5).cutThruAll()
+    p_j2 = _cut_y(p_j2, [(0, 0)], p2.output_bearing[0] - 10)
     bolt6 = [(45 * math.cos(math.radians(a)), 45 * math.sin(math.radians(a))) for a in range(0, 360, 60)]
-    p_j2 = p_j2.faces(">Y").workplane().pushPoints(bolt6).circle(3.3).cutThruAll()
+    p_j2 = _cut_y(p_j2, bolt6, 6.6)
     rail_bolts = [(x, z) for x in (90, 150, 190) for z in (z_rail, -z_rail)]
-    p_j2 = p_j2.faces(">Y").workplane().pushPoints(rail_bolts).circle(3.3).cutThruAll()
-    shapes["upper_plate_J2"] = (p_j2.translate((0, y_plate + PLATE_T, 0)), COL["plate"])
+    p_j2 = _cut_y(p_j2, rail_bolts, 6.6)
+    # XZ 압출(-PLATE_T)은 +Y 방향 → Y ∈ [y_plate, y_plate + PLATE_T]
+    shapes["upper_plate_J2"] = (p_j2.translate((0, y_plate, 0)), COL["plate"])
     # J3 측판: J3 어댑터 체결 + 레일 체결, 중앙 관통 (출력 플랜지 통과)
     p_j3 = (cq.Workplane("XZ").center(UPPER_LEN - 90, 0).rect(240, plate_h).extrude(-PLATE_T)
             .edges("|Y").fillet(10))
     p_j3 = p_j3.union(cq.Workplane("XZ").center(UPPER_LEN, 0).circle(plate_h / 2).extrude(-PLATE_T))
-    p_j3 = (p_j3.faces(">Y").workplane().center(UPPER_LEN, 0)
-            .circle(p3.output_bearing[1] / 2 + 1).cutThruAll())
-    p_j3 = (p_j3.faces(">Y").workplane().center(UPPER_LEN, 0)
-            .pushPoints([(x, z) for x in (-90, -150, -190) for z in (z_rail, -z_rail)])
-            .circle(3.3).cutThruAll())
-    shapes["upper_plate_J3"] = (p_j3.translate((0, y_plate + PLATE_T, 0)), COL["plate"])
+    p_j3 = _cut_y(p_j3, [(UPPER_LEN, 0)], p3.output_bearing[1] + 2)
+    p_j3 = _cut_y(p_j3, [(UPPER_LEN + x, z) for x in (-90, -150, -190) for z in (z_rail, -z_rail)], 6.6)
+    shapes["upper_plate_J3"] = (p_j3.translate((0, y_plate, 0)), COL["plate"])
     # 가스 스프링 상완 앵커 (J2 축에서 r=100, 레일 상단)
     anchor = (cq.Workplane("XY").box(30, 12, 40)
               .translate((p2.gs_r, y_plate + PLATE_T + RAIL / 2, z_rail + RAIL / 2 + 20)))
@@ -94,7 +102,7 @@ def make_forearm(y_plate: float) -> Dict[str, tuple]:
     plate = (cq.Workplane("XZ").center(UPPER_LEN + 45, 0).rect(130, 90).extrude(-PLATE_T)
              .union(cq.Workplane("XZ").center(UPPER_LEN, 0).circle(55).extrude(-PLATE_T))
              .edges("|Y").fillet(8))
-    shapes["fore_plate_J3"] = (plate.translate((0, y_plate + PLATE_T, 0)), COL["plate"])
+    shapes["fore_plate_J3"] = (plate.translate((0, y_plate, 0)), COL["plate"])
     # 오프셋 브라켓: 측판 (Y=y_plate) → J4 하우징 플랜지 (Y=0 중심)
     y0, y1 = sorted((y_plate + PLATE_T, 0.0))
     bracket = (cq.Workplane("XY").box(PLATE_T, y1 - y0 + 45, 90)
@@ -120,11 +128,11 @@ def build_arm() -> cq.Assembly:
         asm.add(o, name=n, color=c)
     # J3: 어댑터(고정부) 가 상완 J3 측판 −Y 면에 체결, 출력이 +Y 로 측판을 관통
     #     모터 전면(Z=0) 이 −Y 방향 회전 후 Y = y_plate − 10(어댑터) 에 오도록 배치
-    j3 = _joint_shapes(p3, -90.0, (UPPER_LEN, y_plate - 10.0 - PLATE_T, 0))
+    j3 = _joint_shapes(p3, -90.0, (UPPER_LEN, y_plate - 10.0, 0))
     for n, (o, c) in j3.items():
         asm.add(o, name=f"J3_{n}", color=c)
     # 전완: J3 출력 플랜지 상면 (+Y 쪽)
-    y_fore_plate = y_plate - 10.0 - PLATE_T + joint_stack_length(p3)
+    y_fore_plate = y_plate - 10.0 + joint_stack_length(p3)
     for n, (o, c) in make_forearm(y_fore_plate).items():
         asm.add(o, name=n, color=c)
     # 베이스 가스 스프링 앵커 포스트 (J1 측, J2 축 위 h)
