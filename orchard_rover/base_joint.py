@@ -41,6 +41,8 @@ class BaseJointParams:
     bracket_t: float = ADAPTER_T    # J2 사이클로이드 어댑터 자리를 겸함
     bracket_w: float = 180.0        # J2 링 하우징 Ø165 체결
     gusset_t: float = 12.0
+    gusset_depth: float = 60.0      # 판 +Y 면에서의 깊이 (바닥)
+    gusset_h: float = 240.0         # 높이 (터릿 상면에서) — J2 축(200) 위까지, 상단 R90 윤곽 안 (거셋 X ±78~90)
     shoulder_rise: float = 200.0    # 터릿 상면 → J2 축
     gearbox_d: float = 57.0
     gearbox_len: float = 60.0       # 1:15 유성 (NEMA23 플랜지형)
@@ -85,6 +87,12 @@ def make_turret(b: BaseJointParams) -> cq.Workplane:
     return t
 
 
+def make_bracket_gusset(b: BaseJointParams) -> cq.Workplane:
+    """J2 브라켓 거셋 1장: YZ 평면 삼각 (깊이 Y gusset_depth × 높이 Z gusset_h), 두께 X 0→gusset_t."""
+    return (cq.Workplane("YZ").polyline([(0, 0), (b.gusset_depth, 0), (0, b.gusset_h)]).close()
+            .extrude(b.gusset_t))                                                 # YZ 압출 = +X
+
+
 def make_shoulder_bracket(b: BaseJointParams, p2: ShoulderParams) -> cq.Workplane:
     """J2 브라켓 겸 사이클로이드 어댑터: 수직 판 (XZ 평면, Y ∈ [−bracket_t, 0]), 거셋, 바닥 플랜지.
 
@@ -98,10 +106,10 @@ def make_shoulder_bracket(b: BaseJointParams, p2: ShoulderParams) -> cq.Workplan
           .translate((0, -b.bracket_t, 0)))
     pl = _cut_y(pl, [(0, zc)], 40.0)                                           # 모터 보스 Ø38.1
     pl = _cut_y(pl, [(sx * 23.57, zc + sz * 23.57) for sx in (1, -1) for sz in (1, -1)], 5.2)
-    # 거셋 (양측, 삼각) — 판 +Y 면(모터 측)에서 시작
-    g = (cq.Workplane("XY").polyline([(0, 0), (60, 0), (0, 120)]).close().extrude(b.gusset_t))
-    gL = g.rotate((0, 0, 0), (0, 0, 1), 90).translate((b.bracket_w / 2 - b.gusset_t, 0, 0))
-    gR = g.rotate((0, 0, 0), (0, 0, 1), 90).translate((-b.bracket_w / 2, 0, 0))
+    # 거셋 (양측, 수직 삼각) — 판 +Y 면(모터 측), 면외 강성 보강
+    g = make_bracket_gusset(b)
+    gL = g.translate((b.bracket_w / 2 - b.gusset_t, 0, 0))
+    gR = g.translate((-b.bracket_w / 2, 0, 0))
     # 바닥 플랜지 (터릿 체결 M6 ×4), Y ∈ [0, 60]
     foot = cq.Workplane("XY").rect(b.bracket_w, 60).extrude(b.gusset_t).translate((0, 30, 0))
     foot = foot.faces(">Z").workplane().pushPoints([(-60, 10), (60, 10), (-60, -10), (60, -10)]).circle(3.3).cutThruAll()
