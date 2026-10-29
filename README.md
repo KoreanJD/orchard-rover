@@ -28,7 +28,8 @@ orchard_rover/
   transport_check.py       운반 자세 간섭 검토 (OCC 최소 거리)
   motion_check.py          관절 가동 범위 간섭 검토 (부품 단위, 단일 관절 스윕 + 조합 자세)
   plate_dxf.py             팔·J1 판재 부품 가공 도면 DXF
-tests/                     pytest 53개 (지지 경로·가동 범위·부품 강도·DXF 포함)
+  urdf_export.py           MoveIt2 용 URDF·SRDF·링크 STL (output/urdf/orchard_rover_description)
+tests/                     pytest 62개 (지지 경로·가동 범위·부품 강도·DXF 포함·URDF 순기구학)
 docs/                      설계 기록 (서스펜션 / 팔 사양 / 케이블 라우팅)
 output/                    생성물: STEP · STL · DXF · PNG · GIF · 보고서
 ```
@@ -52,6 +53,7 @@ python -m orchard_rover.cable_routing                   # 케이블 보고서
 python -m orchard_rover.transport_check                 # 운반 자세 간섭
 python -m orchard_rover.motion_check                    # 관절 가동 범위 간섭
 python -m orchard_rover.plate_dxf                       # 판재 가공 도면 (output/dxf)
+python -m orchard_rover.urdf_export                     # URDF/SRDF + 메시 (ROS 2 패키지)
 pytest
 ```
 

@@ -100,6 +100,15 @@ J1 ±180 / J2 −20~90 / J3 ±120 / J4 ±180 / J5 ±110 / J6 ±180 단일 관절
 ## 대표 궤적 (`arm_workspace.py`)
 운반(T3) → 상단 전정 (0.90, 1.95) 툴 45° 상향 → 중단 전정 (1.25, 1.30) → 밑동 제초 (0.90, 0.10) 툴 80° 하향 → 운반
 
+## MoveIt2 기술 패키지 (`urdf_export.py` → `output/urdf/orchard_rover_description/`)
+- ROS 2 ament 패키지: `urdf/orchard_rover.urdf`, `srdf/orchard_rover.srdf`, `meshes/{visual,collision}/*.stl` (mm STL × 0.001)
+- 링크: base_link(구동체 + J1 고정부) → j1_link → upper_arm → forearm_root → forearm_tube → wrist → flange → tool0
+- 관절 축·부호는 CAD 자세 함수(`place`)와 동일: J1 +Z, J2·J3·J5 −Y (양수 = 들어 올림), J4·J6 +X. 원점 J2 축 = (0.300, 0, 0.958) m
+- 한계 = 가동 범위 표, effort·velocity = 액추에이터 표. SRDF: arm 그룹(base_link→tool0), home·transport(T3) 자세, 인접 링크 충돌 제외
+- 충돌 메시는 coarse (공차 3 mm). 관성은 CAD 체적 × Al 밀도 근사 (모터 실밀도 아님) — 동역학 제어용으로는 실측 보정 필요
+- 가스 스프링은 2체 부품이라 미포함. 조합 자세의 팔↔차체 충돌 구간(가동 범위 절)은 base_link 충돌 메시로 MoveIt 이 회피
+- 검증: URDF 순기구학으로 옮긴 부품 질량중심 = CAD 자세 (임의 6축 자세 3종, 0.01 mm 이내)
+
 ## 제어
 SBC + ROS2·MoveIt2 → CAN 마스터 MCU 100 Hz → CAN 폐루프 스테퍼 드라이버 ×6 (모터 일체). 손목 카메라 비전 서보, 툴 접촉 센서, 전류 한계 충돌 감지
 
