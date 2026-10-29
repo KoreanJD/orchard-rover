@@ -21,13 +21,14 @@ orchard_rover/
   wrist_joint.py           J4 롤 / J5 피치 / J6 롤 + ISO 9409-1-50 플랜지
   arm_assembly.py          상완·전완·손목 조립
   base_joint.py            J1 베이스 요 + 구동체 결합 (전체 로봇 STEP)
-  arm_check.py             관절 토크·스테퍼 속도-토크·처짐·전도 검증
+  arm_check.py             관절 토크·스테퍼 속도-토크·처짐·전도·부품 강도 검증
   arm_workspace.py         순기구학·IK·작업 영역·궤적 애니메이션
   arm_pose_render.py       자세별 컬러 렌더 (matplotlib)
   cable_routing.py         케이블 번들 산정·관절별 여유 길이·드럼 경로
   transport_check.py       운반 자세 간섭 검토 (OCC 최소 거리)
   motion_check.py          관절 가동 범위 간섭 검토 (부품 단위, 단일 관절 스윕 + 조합 자세)
-tests/                     pytest 47개 (지지 경로·가동 범위 포함)
+  plate_dxf.py             팔·J1 판재 부품 가공 도면 DXF
+tests/                     pytest 53개 (지지 경로·가동 범위·부품 강도·DXF 포함)
 docs/                      설계 기록 (서스펜션 / 팔 사양 / 케이블 라우팅)
 output/                    생성물: STEP · STL · DXF · PNG · GIF · 보고서
 ```
@@ -50,6 +51,7 @@ python -m orchard_rover.arm_workspace                   # 작업 영역 그림·
 python -m orchard_rover.cable_routing                   # 케이블 보고서
 python -m orchard_rover.transport_check                 # 운반 자세 간섭
 python -m orchard_rover.motion_check                    # 관절 가동 범위 간섭
+python -m orchard_rover.plate_dxf                       # 판재 가공 도면 (output/dxf)
 pytest
 ```
 

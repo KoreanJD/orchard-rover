@@ -11,7 +11,9 @@ from typing import Dict, List, Tuple
 
 G = 9.81
 E_AL = 69_000.0        # MPa (6061-T6)
+YIELD_AL = 276.0       # MPa (6061-T6)
 I_HFS5_3030 = 28_000.0  # mm^4, HFS5-3030 단면 2차 모멘트 (카탈로그 Ix≈2.8 cm^4)
+DYN = 1.5              # 동적 계수 (관절 액추에이터 선정과 동일)
 
 
 @dataclass
@@ -35,22 +37,34 @@ SEGMENTS: List[Segment] = [
 TOOL_CG_OFFSET = 80.0
 
 
-def joint_static_torques() -> Dict[str, float]:
-    """어깨(J2)·팔꿈치(J3)·손목 피치(J4) 축의 정적 중력 토크(N·m)."""
+def _point_masses() -> List[Tuple[float, float]]:
+    """SEGMENTS 를 어깨 축 기준 (x_cg, mass) 질점 목록으로."""
     x = 0.0
-    masses: List[Tuple[float, float]] = []   # (x_cg from shoulder, mass)
+    masses: List[Tuple[float, float]] = []
     for s in SEGMENTS:
         if s.name == "tool":
             masses.append((x + TOOL_CG_OFFSET, s.mass))
         else:
             masses.append((x + s.length / 2, s.mass))
         x += s.length
-    reach = x + TOOL_CG_OFFSET
+    return masses
+
+
+def torque_about(x0: float) -> float:
+    """수평 전개 자세에서 x0 (어깨 축 기준, mm) 보다 바깥 질량의 중력 모멘트 (N·m)."""
+    return sum(max(0.0, xc - x0) * m * G for xc, m in _point_masses()) / 1000.0
+
+
+def weight_beyond(x0: float) -> float:
+    """x0 보다 바깥 질량의 무게 (N)."""
+    return sum(m * G for xc, m in _point_masses() if xc > x0)
+
+
+def joint_static_torques() -> Dict[str, float]:
+    """어깨(J2)·팔꿈치(J3)·손목 피치(J4) 축의 정적 중력 토크(N·m)."""
+    reach = sum(s.length for s in SEGMENTS) + TOOL_CG_OFFSET
     x_elbow = 500.0
     x_wrist = 950.0
-
-    def torque_about(x0: float) -> float:
-        return sum(max(0.0, xc - x0) * m * G for xc, m in masses) / 1000.0
 
     return {
         "reach_to_tool_cg": reach,
@@ -102,6 +116,90 @@ def tip_deflection() -> Dict[str, float]:
     }
 
 
+def plate_strength() -> Dict[str, Dict[str, float]]:
+    """2026-10-29 형상 변경 부품의 응력·안전율 (수평 완전 전개, 툴 3 kg, 동적 ×1.5, 항복 기준).
+
+    - J1 브라켓 (10t, J2 어댑터 겸용): J2 축 하중을 하단 단면에서 면내(J2 토크 + 수평력×높이)
+      + 면외(수직력 × 상완 하중면 Y 오프셋) 굽힘으로 합산. J2 토크는 액추에이터 최대 출력.
+    - 전완판 (10t, J3 어댑터 겸용): J4 모터 창 단면(상하 띠 2개)의 굽힘.
+    - J4 하우징: 롤 베어링 시트 (가장 얇은 벽) 단면의 굽힘 + J4 출력 토크 비틀림 (von Mises).
+    - J5 축 Ø12: 손목 이후 하중의 절반, 블록 면 → 지지 베어링 중심 캔틸레버.
+    """
+    from orchard_rover.arm_assembly import PLATE_T, UPPER_LEN, upper_plate_y
+    from orchard_rover.base_joint import BaseJointParams
+    from orchard_rover.shoulder_joint import ADAPTER_T, ShoulderParams, gas_spring_balance
+    from orchard_rover.wrist_joint import NEMA17, WristParams
+
+    out: Dict[str, Dict[str, float]] = {}
+    b, p2, w = BaseJointParams(), ShoulderParams(), WristParams()
+
+    # --- J1 브라켓 ---
+    weight = weight_beyond(-1.0)
+    L = gas_spring_balance(p2)["L_horizontal"]
+    f_spring = (p2.gs_force * p2.gs_r / L, p2.gs_force * p2.gs_h / L)     # 상완 앵커에 작용 (x, z)
+    cases = [(f_spring[0], f_spring[1] - weight), (0.0, -weight)]          # 스프링 작동 / 상실
+    fx, fz = max(cases, key=lambda f: math.hypot(*f))
+    fx, fz = DYN * abs(fx), DYN * abs(fz)
+    t_j2 = p2.motor_holding * 0.5 * p2.cyc.ratio * 0.8 * 1000.0           # N·mm, 액추에이터 최대
+    y_off = abs(upper_plate_y(p2) + PLATE_T / 2) - b.bracket_t / 2         # 상완 하중면 ↔ 브라켓 중면
+    m_in = t_j2 + fx * b.shoulder_rise
+    m_out = fz * y_off
+    z_in = b.bracket_t * b.bracket_w ** 2 / 6
+
+    def out_of_plane(depth: float) -> Tuple[float, float]:
+        """판 (Y −t..0) + 수직 거셋 2장 (Y 0..depth) T 단면의 X 축 굽힘 (I, 최외단 거리)."""
+        a1, y1 = b.bracket_w * b.bracket_t, -b.bracket_t / 2
+        a2, y2 = 2 * b.gusset_t * depth, depth / 2
+        yc = (a1 * y1 + a2 * y2) / (a1 + a2)
+        i = (b.bracket_w * b.bracket_t ** 3 / 12 + a1 * (y1 - yc) ** 2
+             + 2 * b.gusset_t * depth ** 3 / 12 + a2 * (y2 - yc) ** 2)
+        return i, max(yc + b.bracket_t, depth - yc)
+
+    i0, c0 = out_of_plane(b.gusset_depth)
+    sig = m_in / z_in + m_out * c0 / i0
+    # 면외 굽힘 (터릿 상면 → J2 축 캔틸레버, 끝 모멘트, 거셋 깊이는 높이에 따라 선형 감소):
+    # 판 상단이 Y 로 휘고 X 축 둘레로 기운다. X 축(팔 방향) 둘레 회전이라 팔 끝 변위는
+    # 리치가 아니라 J2 축 높이·Y 오프셋 거리에 비례.
+    n, h = 400, b.shoulder_rise
+    tilt = tip_y = 0.0
+    for k in range(n):
+        z = (k + 0.5) * h / n
+        depth = max(0.0, b.gusset_depth * (1 - z / b.gusset_h))
+        tilt += m_out / (E_AL * out_of_plane(depth)[0]) * h / n
+        tip_y += tilt * h / n
+    tip = tip_y + tilt * math.hypot(h, y_off)
+    out["J1_bracket"] = {"sigma_MPa": sig, "SF": YIELD_AL / sig, "M_inplane_Nm": m_in / 1000,
+                         "M_outplane_Nm": m_out / 1000, "tilt_mrad": tilt * 1000, "tip_mm": tip}
+
+    # --- 전완판 J4 모터 창 단면 ---
+    x_h = UPPER_LEN + w.j4_offset
+    x_win = x_h + 10 - 48 - 2
+    m = DYN * torque_about(x_win) * 1000.0
+    win, h_out = NEMA17 / 2 + 2, 45.0
+    h = h_out - win
+    d = (h_out + win) / 2
+    i_sec = 2 * (ADAPTER_T * h ** 3 / 12 + ADAPTER_T * h * d ** 2)
+    sig = m / (i_sec / h_out)
+    out["fore_plate_window"] = {"sigma_MPa": sig, "SF": YIELD_AL / sig, "M_Nm": m / 1000}
+
+    # --- J4 하우징 베어링 시트 단면 ---
+    x_seat = x_h + w.j4_housing_len - 9.0
+    m = DYN * torque_about(x_seat) * 1000.0
+    t = 11.5e3                                                             # J4 출력 토크 N·mm
+    D, d_in = w.j4_housing_d, 65.0
+    z_b = math.pi * (D ** 4 - d_in ** 4) / (32 * D)
+    sig_b, tau = m / z_b, t / (2 * z_b)
+    sig = math.sqrt(sig_b ** 2 + 3 * tau ** 2)
+    out["j4_housing_seat"] = {"sigma_MPa": sig, "SF": YIELD_AL / sig, "M_Nm": m / 1000, "wall_mm": (D - d_in) / 2}
+
+    # --- J5 축 Ø12 --- (손목 질점 x=950 부터 바깥: 손목 액추에이터·링크·툴, 두 축이 반씩)
+    f = DYN * weight_beyond(949.0) / 2
+    lever = 2.0 + 4.0                                                      # 블록 면 → 6001 폭 중앙
+    sig = f * lever / (math.pi * 12.0 ** 3 / 32)
+    out["J5_stub_shaft"] = {"sigma_MPa": sig, "SF": 205.0 / sig, "F_N": f}   # SUS304 σy 205
+    return out
+
+
 def tipover(base_mass: float = 60.0, arm_mass: float = 12.0, tool: float = 3.0,
             half_track: float = 506.0, base_cg_z: float = 450.0,
             arm_base_z: float = 950.0, slope_deg: float = 15.0) -> Dict[str, float]:
@@ -147,3 +245,7 @@ if __name__ == "__main__":
     print("\n=== 전도 ===")
     for k, v in tipover().items():
         print(f"  {k:16s}: {v:8.2f}")
+
+    print("\n=== 부품 강도 (동적 ×1.5, 항복 기준) ===")
+    for part, r in plate_strength().items():
+        print(f"  {part:18s} " + "  ".join(f"{k} {v:7.1f}" for k, v in r.items()))
