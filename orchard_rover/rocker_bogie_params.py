@@ -32,10 +32,10 @@ Point2 = Tuple[float, float]
 # MISUMI 표준 부품 테이블 (misumi_parts.md 기준)
 # ---------------------------------------------------------------------------
 BEARINGS: Dict[int, Dict[str, float]] = {
-    # 축경 : {OD, 폭, 정격 하중(N)}
+    # 내경 : {OD, 폭, 정격 하중(N)}
     10: {"od": 26.0, "width": 8.0, "load": 2360.0, "name": "6000ZZ"},
     12: {"od": 28.0, "width": 8.0, "load": 2800.0, "name": "6001ZZ"},
-    16: {"od": 35.0, "width": 10.0, "load": 4750.0, "name": "6003ZZ"},
+    17: {"od": 35.0, "width": 10.0, "load": 4750.0, "name": "6003ZZ"},
     20: {"od": 42.0, "width": 12.0, "load": 6120.0, "name": "6004ZZ"},
 }
 
@@ -72,7 +72,8 @@ class SuspensionParams:
         plate_t: 로커/보기 플레이트 두께(Al 6061-T6).
         arm_w: 로커/보기 암 폭(측면도 상 높이).
         diff_bar_half_len: 차동 바 중심→링크 연결점 거리(Y).
-        rocker_shaft_d: 로커 피벗 축경.
+        rocker_shaft_d: 로커 피벗 축경 (SHF16 클램프·SCS16 칼라 구간).
+        rocker_journal_d: 로커 피벗 축 베어링 저널경 (단붙이, 6003ZZ 내경).
         bogie_shaft_d: 보기 피벗 축경.
         axle_d: 휠 스터브 액슬 축경.
     """
@@ -122,6 +123,7 @@ class SuspensionParams:
 
     # ---- 축 ----
     rocker_shaft_d: int = 16
+    rocker_journal_d: int = 17    # 6003ZZ 내경 17 → 축은 Ø16/Ø17/Ø16 단붙이
     bogie_shaft_d: int = 12
     axle_d: int = 16
 
@@ -249,7 +251,7 @@ class SuspensionParams:
 
         sf: Dict[str, float] = {}
         # 베어링은 쌍으로 사용 → 하중 1/2
-        sf["rocker_bearing"] = BEARINGS[self.rocker_shaft_d]["load"] / (side_dyn / 2)
+        sf["rocker_bearing"] = BEARINGS[self.rocker_journal_d]["load"] / (side_dyn / 2)
         sf["bogie_bearing"] = BEARINGS[self.bogie_shaft_d]["load"] / (bogie_dyn / 2)
         sf["wheel"] = WHEELS[self.wheel_d]["load"] / n_dyn
 
@@ -269,7 +271,7 @@ class SuspensionParams:
 
         # 로커 피벗 축: SHF16 클램프 중심 → 로커 베어링 쌍 중심 캔틸레버 (SUS304)
         y_clamp = self.frame_half_w + self.shf_flange_t + self.shf_boss_len / 2
-        brg = BEARINGS[self.rocker_shaft_d]
+        brg = BEARINGS[self.rocker_journal_d]
         y_brg = self.derived["y_rocker_in"] + (2 * brg["width"] + 6) / 2
         z_shaft = math.pi * self.rocker_shaft_d ** 3 / 32.0
         sf["rocker_shaft_at_shf16"] = 205.0 / (side_dyn * (y_brg - y_clamp) / z_shaft)

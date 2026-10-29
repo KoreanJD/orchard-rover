@@ -15,6 +15,7 @@ from typing import Dict, List, Tuple
 
 import cadquery as cq
 
+from orchard_rover.arm_assembly import gas_spring_y
 from orchard_rover.arm_pose_render import pose_arm, STAGE_NAME
 from orchard_rover.base_joint import BaseJointParams, build_j1
 from orchard_rover.rocker_bogie_cad import build_assembly as build_rover
@@ -30,7 +31,7 @@ def _compound(shapes: List[cq.Shape]) -> cq.Compound:
 
 
 def static_shapes() -> Dict[str, cq.Shape]:
-    """정적 간섭 대상: 프레임(휠·서스펜션 제외), 차동 바, J1 부품, 가스 스프링 베이스 포스트."""
+    """정적 간섭 대상: 프레임(휠·서스펜션 제외), 차동 바, J1 부품(브라켓·가스 스프링 클레비스 포함)."""
     p = SuspensionParams()
     rover = build_rover(p, 0.0)
     out: Dict[str, cq.Shape] = {}
@@ -47,16 +48,21 @@ def static_shapes() -> Dict[str, cq.Shape]:
     return out
 
 
-def gas_spring_posed(j2_deg: float) -> cq.Shape:
-    """가스 스프링: 베이스 앵커 (J2 축 위 h) → 상완 앵커 (팔 위 r, J2 와 함께 회전). Ø22 실린더."""
-    b, p2 = BaseJointParams(), ShoulderParams()
-    ox, oy, oz = J2_ORIGIN
-    a0 = cq.Vector(ox, oy - 80, oz + p2.gs_h)                 # 브라켓 상단 앵커 (상완 플레이트 외측 Y=−80 근처)
-    th = math.radians(j2_deg)
-    a1 = cq.Vector(ox + p2.gs_r * math.cos(th), oy - 80, oz + p2.gs_r * math.sin(th))
+def gas_spring_posed(q: Dict[str, float]) -> cq.Shape:
+    """가스 스프링: 베이스 앵커 (J2 축 아래 h, 터릿 클레비스) → 상완 앵커 (팔 중심선 r, J2 와 함께 회전).
+
+    상완 측판 바깥 평면, Ø22 실린더. J1 요에 따라 터릿과 함께 회전.
+    """
+    p2 = ShoulderParams()
+    y = gas_spring_y(p2)
+    th = math.radians(q.get("J2", 0.0))
+    a0 = cq.Vector(0, y, -p2.gs_h)
+    a1 = cq.Vector(p2.gs_r * math.cos(th), y, p2.gs_r * math.sin(th))
     v = a1 - a0
-    plane = cq.Plane(origin=a0, normal=v.normalized())
-    return cq.Workplane(plane).circle(11).extrude(v.Length).val()
+    spring = cq.Workplane(cq.Plane(origin=a0, normal=v.normalized())).circle(11).extrude(v.Length).val()
+    if q.get("J1", 0):
+        spring = spring.rotate(cq.Vector(0, 0, 0), cq.Vector(0, 0, 1), q["J1"])
+    return spring.translate(cq.Vector(*J2_ORIGIN))
 
 
 def posed_arm_shapes(q: Dict[str, float]) -> Dict[int, cq.Shape]:
@@ -70,7 +76,7 @@ def posed_arm_shapes(q: Dict[str, float]) -> Dict[int, cq.Shape]:
 
 def check_pose(q: Dict[str, float], statics: Dict[str, cq.Shape]) -> Dict[str, object]:
     arm = posed_arm_shapes(q)
-    spring = gas_spring_posed(q["J2"])
+    spring = gas_spring_posed(q)
     results: List[Tuple[str, str, float]] = []
     moving = {st: s for st, s in arm.items() if st >= 1}
     # A. 이동부 ↔ 정적부

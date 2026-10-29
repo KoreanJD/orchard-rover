@@ -8,7 +8,8 @@ J1 축 = Z, 위치 X=+300 (차동 바 스윙 영역 X=−150±120 회피), 상�
   ├─ 베이스 플레이트 12t (레일 2본 + 크로스멤버 2본에 M8 T-너트)
   │    └─ 아래로: NEMA23 + 1:15 유성 감속기 (프레임 내부로 매달림)
   ├─ 크로스롤러 베어링 (ID 80 / OD 120 / W 16), 외륜 고정
-  └─ 터릿 플레이트 12t (내륜 회전) → J2 브라켓 (수직 12t) → J2 축 Z=950
+  └─ 터릿 플레이트 12t (내륜 회전) ┬ J2 브라켓 (수직 10t, J2 어댑터 겸용) → J2 축 Z=950
+                                     └ 가스 스프링 클레비스 (J2 축 아래 180, 상완 측판 바깥 평면)
 """
 
 from __future__ import annotations
@@ -20,10 +21,11 @@ from typing import Dict, Tuple
 
 import cadquery as cq
 
-from orchard_rover.arm_assembly import build_arm
+from orchard_rover.arm_assembly import _cut_y, build_arm, gas_spring_y
 from orchard_rover.rocker_bogie_cad import build_assembly as build_rover
 from orchard_rover.rocker_bogie_params import SuspensionParams
-from orchard_rover.shoulder_joint import ShoulderParams
+from orchard_rover.shoulder_joint import (ADAPTER_T, ShoulderParams, adapter_radius, gas_spring_balance,
+                                          make_gas_spring)
 
 
 @dataclass
@@ -36,13 +38,15 @@ class BaseJointParams:
     bearing: Tuple[float, float, float] = (80.0, 120.0, 16.0)   # 크로스롤러 ID/OD/W
     turret_size: float = 180.0
     turret_t: float = 12.0
-    bracket_t: float = 12.0
-    bracket_w: float = 160.0
+    bracket_t: float = ADAPTER_T    # J2 사이클로이드 어댑터 자리를 겸함
+    bracket_w: float = 180.0        # J2 링 하우징 Ø165 체결
+    gusset_t: float = 12.0
     shoulder_rise: float = 200.0    # 터릿 상면 → J2 축
     gearbox_d: float = 57.0
     gearbox_len: float = 60.0       # 1:15 유성 (NEMA23 플랜지형)
     motor_len: float = 76.0
-    gs_h: float = 180.0             # 가스 스프링 베이스 앵커 높이 (J2 축 위)
+    clevis_gap: float = 12.5        # 가스 스프링 아이 폭 12 + 여유
+    clevis_t: float = 6.0
 
 
 def z_rail_top(p: SuspensionParams) -> float:
@@ -82,27 +86,41 @@ def make_turret(b: BaseJointParams) -> cq.Workplane:
 
 
 def make_shoulder_bracket(b: BaseJointParams, p2: ShoulderParams) -> cq.Workplane:
-    """J2 브라켓: 수직 12t 플레이트 (XZ 평면), 모터 보스 홀, NEMA23 볼트, 가스 스프링 앵커, 거셋.
+    """J2 브라켓 겸 사이클로이드 어댑터: 수직 판 (XZ 평면, Y ∈ [−bracket_t, 0]), 거셋, 바닥 플랜지.
 
-    터릿 상면 Z=0 기준. J2 축은 (0, 0, shoulder_rise). 플레이트는 Y ∈ [0, bracket_t] (모터 측).
+    터릿 상면 Z=0 기준. J2 축은 (0, 0, shoulder_rise). 판이 J2 어댑터 자리를 차지하여
+    +Y 면에 NEMA23 (보스 Ø38.1, M5 ×4), −Y 면에 링 하우징이 체결된다.
     """
-    h = b.shoulder_rise + b.gs_h + 30
-    pl = (cq.Workplane("XZ").center(0, h / 2).rect(b.bracket_w, h).extrude(-b.bracket_t)
-          .edges("|Y").fillet(10))
     zc = b.shoulder_rise
-    pl = pl.faces(">Y").workplane().center(0, zc).circle(20).cutThruAll()          # 모터 보스 Ø38.1
-    pl = (pl.faces(">Y").workplane().center(0, zc)
-          .pushPoints([(23.57, 23.57), (-23.57, 23.57), (23.57, -23.57), (-23.57, -23.57)])
-          .circle(2.6).cutThruAll())
-    pl = pl.faces(">Y").workplane().center(0, zc + b.gs_h).circle(4.1).cutThruAll()  # 가스 스프링 앵커 M8
-    # 거셋 (양측, 삼각 12t)
-    g = (cq.Workplane("XY").polyline([(0, 0), (60, 0), (0, 120)]).close().extrude(b.bracket_t))
-    gL = g.rotate((0, 0, 0), (0, 0, 1), 90).translate((b.bracket_w / 2 - b.bracket_t, b.bracket_t, 0))
-    gR = g.rotate((0, 0, 0), (0, 0, 1), 90).translate((-b.bracket_w / 2, b.bracket_t, 0))
-    # 바닥 플랜지 (터릿 체결 M6 ×4)
-    foot = (cq.Workplane("XY").rect(b.bracket_w, 60).extrude(b.bracket_t).translate((0, b.bracket_t + 30 - b.bracket_t, 0)))
+    assert b.bracket_w / 2 >= adapter_radius(p2), "브라켓이 J2 링 하우징을 덮지 못함"
+    pl = (cq.Workplane("XZ").center(0, zc / 2).rect(b.bracket_w, zc).extrude(-b.bracket_t)
+          .union(cq.Workplane("XZ").center(0, zc).circle(b.bracket_w / 2).extrude(-b.bracket_t))
+          .translate((0, -b.bracket_t, 0)))
+    pl = _cut_y(pl, [(0, zc)], 40.0)                                           # 모터 보스 Ø38.1
+    pl = _cut_y(pl, [(sx * 23.57, zc + sz * 23.57) for sx in (1, -1) for sz in (1, -1)], 5.2)
+    # 거셋 (양측, 삼각) — 판 +Y 면(모터 측)에서 시작
+    g = (cq.Workplane("XY").polyline([(0, 0), (60, 0), (0, 120)]).close().extrude(b.gusset_t))
+    gL = g.rotate((0, 0, 0), (0, 0, 1), 90).translate((b.bracket_w / 2 - b.gusset_t, 0, 0))
+    gR = g.rotate((0, 0, 0), (0, 0, 1), 90).translate((-b.bracket_w / 2, 0, 0))
+    # 바닥 플랜지 (터릿 체결 M6 ×4), Y ∈ [0, 60]
+    foot = cq.Workplane("XY").rect(b.bracket_w, 60).extrude(b.gusset_t).translate((0, 30, 0))
     foot = foot.faces(">Z").workplane().pushPoints([(-60, 10), (60, 10), (-60, -10), (60, -10)]).circle(3.3).cutThruAll()
     return pl.union(gL).union(gR).union(foot)
+
+
+def make_gs_clevis(b: BaseJointParams, pin_z: float) -> cq.Workplane:
+    """가스 스프링 베이스 클레비스: 받침판 6t + 치크 2장 (핀 Y 방향, M8) — 터릿 상면 Z=0, 핀 높이 pin_z."""
+    half = b.clevis_gap / 2 + b.clevis_t
+    base = cq.Workplane("XY").box(40, 2 * half, 6, centered=(True, True, False))
+    cl = base
+    for s in (1, -1):
+        y_in = s * b.clevis_gap / 2
+        cheek = (cq.Workplane("XZ").center(0, pin_z / 2).rect(24, pin_z).extrude(-b.clevis_t)
+                 .union(cq.Workplane("XZ").center(0, pin_z).circle(12).extrude(-b.clevis_t)))
+        cl = cl.union(cheek.translate((0, y_in if s > 0 else y_in - b.clevis_t, 0)))
+    cl = _cut_y(cl, [(0, pin_z)], 8.2)
+    pin = cq.Workplane("XZ").center(0, pin_z).circle(4).extrude(half + 2, both=True)
+    return cl.union(pin)
 
 
 def make_j1_drive(b: BaseJointParams) -> cq.Workplane:
@@ -110,7 +128,8 @@ def make_j1_drive(b: BaseJointParams) -> cq.Workplane:
     gb = cq.Workplane("XY").circle(b.gearbox_d / 2).extrude(-b.gearbox_len)
     motor = (cq.Workplane("XY").rect(57, 57).extrude(-b.motor_len).edges("|Z").chamfer(5)
              .translate((0, 0, -b.gearbox_len)))
-    shaft = cq.Workplane("XY").circle(7).extrude(b.plate_t + 4 + b.bearing[2] + b.turret_t + 2)
+    # 출력축 상단 = 터릿 상면 (build_j1 의 z_turret + turret_t 와 동일 적층)
+    shaft = cq.Workplane("XY").circle(7).extrude(b.plate_t - 4 + b.bearing[2] + 2 + b.turret_t)
     return gb.union(motor).union(shaft)
 
 
@@ -133,7 +152,20 @@ def build_j1(b: BaseJointParams, p: SuspensionParams, p2: ShoulderParams) -> Tup
     z_top = z_turret + b.turret_t
     asm.add(make_shoulder_bracket(b, p2).translate((x, 0, z_top)), name="shoulder_bracket",
             color=cq.Color(0.85, 0.3, 0.3))
+    # 가스 스프링 베이스 클레비스: J2 축 아래 gs_h, 팔 가스 스프링 평면
+    asm.add(make_gs_clevis(b, b.shoulder_rise - p2.gs_h).translate((x, gas_spring_y(p2), z_top)),
+            name="gs_clevis", color=cq.Color(0.4, 0.4, 0.45))
     return asm, z_top + b.shoulder_rise
+
+
+def gas_spring_home(p2: ShoulderParams, origin: Tuple[float, float, float]) -> cq.Workplane:
+    """수평 자세 가스 스프링: 베이스 앵커 (0, −h) → 상완 앵커 (r, 0), 팔 좌표 origin(J2 축) 기준."""
+    L = gas_spring_balance(p2)["L_horizontal"]
+    elev = math.degrees(math.atan2(p2.gs_h, p2.gs_r))
+    # +Y 축 회전은 +X 를 −Z 로 보내므로 들어 올리려면 음의 각
+    ox, oy, oz = origin
+    return (make_gas_spring(L).rotate((0, 0, 0), (0, 1, 0), -elev)
+            .translate((ox, oy + gas_spring_y(p2), oz - p2.gs_h)))
 
 
 def build_full_robot(theta_left: float = 0.0) -> Tuple[cq.Assembly, Dict[str, float]]:
@@ -143,13 +175,13 @@ def build_full_robot(theta_left: float = 0.0) -> Tuple[cq.Assembly, Dict[str, fl
     p2 = ShoulderParams()
     rover = build_rover(p, theta_left)
     j1, z_j2 = build_j1(b, p, p2)
-    arm = build_arm()
+    arm = build_arm(j2_adapter=False)      # J1 브라켓이 J2 어댑터 자리를 대신
     full = cq.Assembly(name="orchard_robot")
     full.add(rover, name="rover")
     full.add(j1, name="J1")
-    # 팔 좌표계 원점(J2 축) → 구동체 (x_mount, 0, z_j2). 팔 프레임에서 J2 모터는 +Y,
-    # 브라켓은 Y∈[0,12] 모터 측이므로 조인트 어댑터(Y −10..0)와 간섭 없음
+    # 팔 좌표계 원점(J2 축) → 구동체 (x_mount, 0, z_j2)
     full.add(arm, name="arm", loc=cq.Location(cq.Vector(b.x_mount, 0, z_j2)))
+    full.add(gas_spring_home(p2, (b.x_mount, 0.0, z_j2)), name="gas_spring", color=cq.Color(0.2, 0.7, 0.3))
     info = {"z_j2_axis": z_j2, "z_rail_top": z_rail_top(p), "x_mount": b.x_mount,
             "tip_x_home": b.x_mount + 950.0, "tip_z_home": z_j2}
     return full, info
