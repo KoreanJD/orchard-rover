@@ -16,6 +16,10 @@ from typing import Dict, List, Tuple
 
 import cadquery as cq
 
+# 어댑터 플레이트 두께 — 모터 전면과 링 하우징 사이. 조립에 따라 J1 브라켓(J2)이나
+# 전완판(J3)이 이 자리를 대신한다.
+ADAPTER_T = 10.0
+
 
 # ---------------------------------------------------------------------------
 # 파라미터
@@ -84,6 +88,7 @@ class ShoulderParams:
     motor_shaft_d: float = 8.0
     brake_len: float = 30.0         # 후면 전자 브레이크 모듈
     output_bearing: Tuple[float, float, float] = (65.0, 85.0, 10.0)  # 61813 류: ID, OD, W
+    flange_bolt_pcd: float = 90.0   # 출력 플랜지 → 상완 측판 M6 ×6
     arm_plate_t: float = 12.0
     arm_plate_gap: float = 60.0     # 상완 플레이트 간 간격 (HFS5-3030 2본 사이)
     name: str = "J2_shoulder"
@@ -183,9 +188,10 @@ def make_output_flange(c: CycloidParams, p: ShoulderParams) -> cq.Workplane:
               .circle(c.d_out_pin / 2).extrude(2 * c.disc_t + 2).translate((0, 0, -2 * c.disc_t - 2)))
         pins = pn if pins is None else pins.union(pn)
     fl = fl.union(pins)
-    # 상완 플레이트 체결 M6 ×6 (PCD 90)
-    bolt_pts = [(45 * math.cos(2 * math.pi * k / 6), 45 * math.sin(2 * math.pi * k / 6)) for k in range(6)]
-    fl = fl.faces(">Z").workplane().pushPoints(bolt_pts).circle(3.3).cutThruAll()
+    # 상완 플레이트 체결 M6 ×6 — 캡 두께만 (관통하면 출력 핀을 자름)
+    r_b = p.flange_bolt_pcd / 2
+    bolt_pts = [(r_b * math.cos(2 * math.pi * k / 6), r_b * math.sin(2 * math.pi * k / 6)) for k in range(6)]
+    fl = fl.faces(">Z").workplane().pushPoints(bolt_pts).circle(3.3).cutBlind(-t)
     return fl
 
 
@@ -201,22 +207,32 @@ def make_nema23(p: ShoulderParams) -> cq.Workplane:
     return body.union(boss).union(shaft).union(brake)
 
 
-def make_gas_spring(length: float) -> cq.Workplane:
-    """가스 스프링 더미 (실린더 Ø22 + 로드 Ø10), X축 방향, 원점=실린더 끝 아이."""
+def make_gas_spring(length: float, neck: float = 22.0) -> cq.Workplane:
+    """가스 스프링 더미 (실린더 Ø22 + 로드 Ø10), X축 방향, 원점=실린더 끝 아이.
+
+    아이: Ø16 × 폭 12, M8 핀 구멍 Ø8.2 (Y 축). 실린더는 아이에서 neck 만큼 떨어져 시작
+    (클레비스 치크와 겹치지 않도록), 실린더 쪽 넥과 로드는 Ø10.
+    """
     cyl_len = length * 0.55
-    cyl = cq.Workplane("YZ").circle(11).extrude(cyl_len)
-    rod = cq.Workplane("YZ").circle(5).extrude(length - cyl_len).translate((cyl_len, 0, 0))
-    eyes = cq.Workplane("XZ").circle(8).extrude(6, both=True).union(
-        cq.Workplane("XZ").circle(8).extrude(6, both=True).translate((length, 0, 0)))
-    return cyl.union(rod).union(eyes)
+    neck_rod = cq.Workplane("YZ").circle(5).extrude(neck - 6).translate((6, 0, 0))
+    cyl = cq.Workplane("YZ").circle(11).extrude(cyl_len - neck).translate((neck, 0, 0))
+    rod = cq.Workplane("YZ").circle(5).extrude(length - 6 - cyl_len).translate((cyl_len, 0, 0))
+    eyes = None
+    for x in (0.0, length):
+        eye = (cq.Workplane("XZ").circle(8).circle(4.1).extrude(6, both=True)
+               .translate((x, 0, 0)))
+        eyes = eye if eyes is None else eyes.union(eye)
+    return neck_rod.union(cyl).union(rod).union(eyes)
 
 
 # ---------------------------------------------------------------------------
 # 가스 스프링 밸런서 계산
 # ---------------------------------------------------------------------------
 def gas_spring_balance(p: ShoulderParams) -> Dict[str, float]:
-    """베이스 앵커 (0, h) 위, 상완 앵커 팔 위 r 거리. 팔 각도 φ(수평=0).
+    """압축 가스 스프링: 베이스 앵커 J2 축 아래 (0, −h), 상완 앵커 팔 중심선 위 r 거리.
 
+    팔 각도 φ(수평=0). 앵커가 축 아래여야 압축 스프링이 팔을 들어 올린다
+    (축 위에 두면 같은 스프링이 팔을 누르고 길이가 83 mm 까지 줄어 성립하지 않음).
     스프링 길이 L(φ) = sqrt(r² + h² + 2 r h sinφ)
     밸런스 토크 T(φ) = F · r · h · cosφ / L(φ)   (중력 토크 ∝ cosφ 와 같은 형상)
     """
@@ -258,10 +274,10 @@ def build(p: ShoulderParams) -> Tuple[cq.Assembly, Dict[str, cq.Workplane]]:
         "nema23_brake": make_nema23(p),
     }
     z_motor_face = 0.0                     # 모터 전면 = Z 0, 모터는 -Z 쪽
-    z_disc0 = 12.0                         # 어댑터 플레이트 10 + 간극
+    z_disc0 = ADAPTER_T + 2.0              # 어댑터 플레이트 + 간극
     asm = cq.Assembly(name=p.name)
     asm.add(parts["nema23_brake"].translate((0, 0, -p.motor_len)), name="motor", color=cq.Color(0.2, 0.2, 0.25))
-    adapter = (cq.Workplane("XY").circle(c.r_pin_circle + c.r_pin + c.housing_t).extrude(10)
+    adapter = (cq.Workplane("XY").circle(adapter_radius(p)).extrude(ADAPTER_T)
                .faces(">Z").workplane().circle(20).cutThruAll())
     asm.add(adapter, name="adapter", color=cq.Color(0.6, 0.6, 0.62))
     asm.add(parts["ring_housing"].translate((0, 0, z_disc0 - 1)), name="ring", color=cq.Color(0.55, 0.55, 0.6))
@@ -279,20 +295,26 @@ def build(p: ShoulderParams) -> Tuple[cq.Assembly, Dict[str, cq.Workplane]]:
     arm_plate = (cq.Workplane("XY").center(100, 0).slot2D(260, 70, 0).extrude(p.arm_plate_t)
                  .translate((0, 0, z_fl + wb + 10)))
     asm.add(arm_plate, name="upper_arm_plate", color=cq.Color(0.85, 0.3, 0.3))
-    # 가스 스프링: 베이스 앵커 (0, h) → 상완 앵커 (r, 0), 수평 자세
+    # 가스 스프링: 베이스 앵커 (0, −h) → 상완 앵커 (r, 0), 수평 자세
     if p.has_gas_spring:
         gs = gas_spring_balance(p)
         L = gs["L_horizontal"]
-        ang = math.degrees(math.atan2(-p.gs_h, p.gs_r))
+        ang = math.degrees(math.atan2(p.gs_h, p.gs_r))
         spring = (make_gas_spring(L).rotate((0, 0, 0), (0, 0, 1), ang)
-                  .translate((0, p.gs_h, z_fl + wb + 10 + p.arm_plate_t + 15)))
+                  .translate((0, -p.gs_h, z_fl + wb + 10 + p.arm_plate_t + 15)))
         asm.add(spring, name="gas_spring", color=cq.Color(0.2, 0.7, 0.3))
     return asm, parts
 
 
 def joint_stack_length(p: ShoulderParams) -> float:
     """모터 전면(Z=0)에서 출력 플랜지 상면까지의 축방향 길이."""
-    return 12.0 + 2 * p.cyc.disc_t + 2 + p.output_bearing[2] + 10.0
+    return ADAPTER_T + 2.0 + 2 * p.cyc.disc_t + 2 + p.output_bearing[2] + 10.0
+
+
+def adapter_radius(p: ShoulderParams) -> float:
+    """어댑터 플레이트·링 하우징 외경 반경."""
+    c = p.cyc
+    return c.r_pin_circle + c.r_pin + c.housing_t
 
 
 def elbow_params() -> ShoulderParams:
@@ -300,7 +322,7 @@ def elbow_params() -> ShoulderParams:
     cyc = CycloidParams(pins=46, r_pin_circle=63.0, r_pin=2.5, ecc=0.6, r_out_pcd=36.0)
     return ShoulderParams(cyc=cyc, motor_len=76.0, name="J3_elbow", has_gas_spring=False,
                           motor_holding=3.0, torque_static=30.1,
-                          output_bearing=(55.0, 72.0, 9.0))
+                          output_bearing=(55.0, 72.0, 9.0), flange_bolt_pcd=76.0)
 
 
 def export(p: ShoulderParams, out: Path) -> str:

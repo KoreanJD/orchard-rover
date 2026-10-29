@@ -26,6 +26,7 @@ COL = {
 class WristParams:
     x_j3: float = 500.0
     x_flange: float = 1050.0
+    j4_offset: float = 120.0         # J3 축 → J4 하우징 후단 (J3 링 r75.5 + J4 모터 후방 돌출 38 + 여유)
     j4_housing_len: float = 80.0     # 전완 루트, 고정부 (NEMA17 + 유성 1:36 수납)
     j4_housing_d: float = 64.0
     tube_d: float = 50.0
@@ -62,7 +63,7 @@ def _planetary_x(length: float, d: float = 42.0) -> cq.Workplane:
 def build_wrist(w: WristParams) -> Dict[str, Tuple[cq.Workplane, cq.Color]]:
     """손목 체인 형상 dict (팔 좌표계)."""
     s: Dict[str, Tuple[cq.Workplane, cq.Color]] = {}
-    x = w.x_j3 + 60.0   # J3 출력 측판 뒤 (측판 폭 고려)
+    x = w.x_j3 + w.j4_offset   # J4 하우징 후단 (전완 연결 브라켓 앞면)
 
     # ---- J4: 전완 롤 (고정 하우징 + 회전 튜브) ----
     hous = (cq.Workplane("YZ").circle(w.j4_housing_d / 2).extrude(w.j4_housing_len)
@@ -128,7 +129,7 @@ def build_wrist(w: WristParams) -> Dict[str, Tuple[cq.Workplane, cq.Color]]:
 
 
 def wrist_axes(w: WristParams) -> Dict[str, float]:
-    x = w.x_j3 + 60.0
+    x = w.x_j3 + w.j4_offset
     x_tube1 = w.x_flange - w.flange_t - w.j6_len - w.wrist_block[0] - w.j5_yoke_len
     return {"J4_roll_axis": "X (전완 중심)", "J5_pitch_x": x_tube1 + w.j5_yoke_len - 10,
             "J6_roll_axis": "X", "flange_x": w.x_flange,

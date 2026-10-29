@@ -24,10 +24,11 @@ STAGE_RULES: List[Tuple[int, Tuple[str, ...]]] = [
     (5, ("iso_flange",)),
     (4, ("wrist_block", "j6_motor", "j6_gear", "wrist_camera")),
     (3, ("forearm_tube", "j5_yoke", "j5_motor", "j5_gear", "j5_bearing")),
-    (2, ("J3_output_flange", "J3_output_bearing", "fore_plate_J3", "fore_offset_bracket",
+    # J3: 출력 플랜지·베어링은 상완(1), 모터·링·캠·디스크는 전완판과 함께 전완(2)
+    (2, ("J3_motor", "J3_ring", "J3_cam", "J3_disc", "fore_plate_J3", "fore_offset_bracket",
          "j4_housing", "j4_motor", "j4_gear", "j4_bearing")),
     (1, ("J2_output_flange", "J2_output_bearing", "upper_", "gs_anchor_arm", "J3_")),
-    (0, ("J2_", "gs_anchor_base_post")),
+    (0, ("J2_",)),
 ]
 STAGE_COLOR = {0: "#8a8a8f", 1: "#d94848", 2: "#f0902a", 3: "#2e9e4f", 4: "#2a7fd4", 5: "#9b4fd4"}
 STAGE_NAME = {0: "base / J2 fixed", 1: "upper arm  (moved by J2)", 2: "J3 output + J4 housing  (moved by J3)",
