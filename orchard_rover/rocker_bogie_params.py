@@ -72,15 +72,22 @@ class SuspensionParams:
         plate_t: 로커/보기 플레이트 두께(Al 6061-T6).
         arm_w: 로커/보기 암 폭(측면도 상 높이).
         diff_bar_half_len: 차동 바 중심→링크 연결점 거리(Y).
-        rocker_shaft_d: 로커 피벗 축경 (SHF16 클램프·SCS16 칼라 구간).
-        rocker_journal_d: 로커 피벗 축 베어링 저널경 (단붙이, 6003ZZ 내경).
+        rocker_shaft_d: 로커 피벗 축경 (SHF20 클램프·SCS20 칼라 구간).
+        rocker_journal_d: 로커 피벗 축 베어링 저널경 (6004ZZ 내경, 축경과 같음).
         bogie_shaft_d: 보기 피벗 축경.
         axle_d: 휠 스터브 액슬 축경.
     """
 
     # ---- 하중 조건 ----
-    robot_mass_kg: float = 60.0
+    robot_mass_kg: float = 60.0   # 구동체 (CG 는 로커 피벗 중앙 X=0, Y=0 가정)
     dynamic_factor: float = 3.0
+    # 팔 + 툴 (load_cases): J1 축 X=arm_mount_x, 팔 15 kg (J1 포함) CG 는 J1 축에서 arm_cg_reach,
+    # 툴 3 kg 은 tool_reach (완전 전개, arm_check.tipover 와 같은 질량 분포)
+    arm_mass_kg: float = 15.0
+    tool_mass_kg: float = 3.0
+    arm_mount_x: float = 300.0
+    arm_cg_reach: float = 360.0
+    tool_reach: float = 1050.0
 
     # ---- 휠 ----
     wheel_d: int = 250
@@ -99,18 +106,28 @@ class SuspensionParams:
     frame_profile: float = 40.0   # HFS5-4040
     z_frame_low_rail: float = 300.0
     z_frame_top_rail: float = 700.0
-    # 로커 피벗 지지: MISUMI SHF16 플랜지형 샤프트 서포트 (표준품, 2홀 M5 @40, 레일 한 슬롯 체결)
-    shf_flange_t: float = 8.0     # SHF16 플랜지 두께 T
-    shf_boss_len: float = 16.0    # SHF16 클램프 보스 길이 L
-    shf_flange_w: float = 50.0    # SHF16 플랜지 폭 W
-    shf_hole_pitch: float = 40.0  # SHF16 볼트 홀 간격 B
+    # 로커 피벗 지지: MISUMI SHF20 플랜지형 샤프트 서포트 (표준품, 2홀 Ø7 @48, 레일 한 슬롯 체결)
+    # 카탈로그 W60 / T8 / L20 / B48 / 홀 Ø7 (M6) / 클램프 M5. 보스 Ø·플랜지 높이는 단순화 값
+    shf_flange_t: float = 8.0     # 플랜지 두께 T
+    shf_boss_len: float = 20.0    # 클램프 보스 길이 L
+    shf_flange_w: float = 60.0    # 플랜지 폭 W
+    shf_hole_pitch: float = 48.0  # 볼트 홀 간격 B
+    shf_hole_d: float = 7.0
+    shf_boss_d: float = 34.0
+    shf_flange_h: float = 44.0
+    collar_od: float = 32.0       # SCS20 세트 칼라
+    collar_w: float = 12.0
     block_gap: float = 2.0        # 서포트-로커 플레이트 간 스러스트 와셔 간극
     plate_gap: float = 6.0        # 로커-보기 플레이트 간 와셔 간격
-    wheel_gap: float = 10.0       # 보기 플레이트-휠 내측면 간격
+    wheel_gap: float = 16.0       # 보기 플레이트-휠 내측면 간격 (로커 축 끝·SCS20 칼라보다 휠이 Y 바깥)
+    fork_gap: float = 10.0        # 전방 휠 외측면-외측 포크 간격
 
     # ---- 단면 ----
     plate_t: float = 12.0
-    arm_w: float = 60.0
+    arm_w: float = 70.0           # 면외 굽힘 안전율 (팔 부착 하중 케이스) 확보
+    # 전방 외측 포크: 허브모터 축을 로커 플레이트와 함께 양쪽에서 지지 (로커 전방 암과 평행한 짧은 암)
+    fork_len: float = 185.0       # 축(F) → 스탠드오프(로커 피벗 방향), 타이어 반경 125 밖·경량화 홀 사이
+    standoff_d: float = 20.0
 
     # ---- 차동 ----
     # 링크 로드는 X(전후) 방향으로 배치: 바 끝단의 원호 운동에서 Y 변위는
@@ -122,10 +139,13 @@ class SuspensionParams:
     link_rod_d: float = 8.0
 
     # ---- 축 ----
-    rocker_shaft_d: int = 16
-    rocker_journal_d: int = 17    # 6003ZZ 내경 17 → 축은 Ø16/Ø17/Ø16 단붙이
+    rocker_shaft_d: int = 20      # SHF20·SCS20 + 6004ZZ, 단붙이 없는 직선축
+    rocker_journal_d: int = 20
     bogie_shaft_d: int = 12
-    axle_d: int = 16
+    axle_d: int = 16              # 아이들러 스터브 액슬
+    front_axle_d: float = 12.0    # 전방 허브모터 고정축 M12 (플랫 10, 드롭아웃 치수는 모터 사양 확정 후)
+    front_axle_flat: float = 10.0
+    front_axle_yield: float = 640.0   # 허브모터 축 강종 미확정 → 8.8 급(σy 640) 가정
 
     # ---- 재료 (Al 6061-T6) ----
     yield_mpa: float = 276.0
@@ -154,7 +174,10 @@ class SuspensionParams:
         y_bogie_out = y_bogie_in + self.plate_t
         y_wheel_in = y_bogie_out + self.wheel_gap
         y_wheel_c = y_wheel_in + WHEELS[self.wheel_d]["width"] / 2.0
+        y_fork_in = y_wheel_in + WHEELS[self.wheel_d]["width"] + self.fork_gap
         self.derived.update(
+            y_fork_in=y_fork_in,
+            y_fork_c=y_fork_in + self.plate_t / 2.0,
             y_rocker_c=0.5 * (y_rocker_in + y_rocker_out),
             y_bogie_c=0.5 * (y_bogie_in + y_bogie_out),
             y_wheel_c=y_wheel_c,
@@ -173,7 +196,7 @@ class SuspensionParams:
     # ------------------------------------------------------------------
     @property
     def pivot_block_t(self) -> float:
-        """피벗 서포트(SHF16)가 레일 면에서 돌출하는 길이 = 플랜지 + 보스."""
+        """피벗 서포트(SHF20)가 레일 면에서 돌출하는 길이 = 플랜지 + 보스."""
         return self.shf_flange_t + self.shf_boss_len
 
     @property
@@ -241,9 +264,58 @@ class SuspensionParams:
         n_f = w_side - n_m - n_r
         return {"front": n_f, "mid": n_m, "rear": n_r, "per_side": w_side}
 
-    def safety_factors(self) -> Dict[str, float]:
-        """베어링·휠·플레이트의 안전율을 계산한다 (동하중 계수 적용)."""
-        loads = self.static_wheel_loads()
+    def load_cases(self) -> Dict[str, Tuple[float, float, float]]:
+        """하중 케이스 {이름: (총 질량 kg, CG X, CG Y)} — 구동체 + 팔·툴 자세별.
+
+        vehicle_only 는 원래 설계 조건(구동체만), 나머지는 팔을 단 실제 운용.
+        reach_* 는 팔 수평 완전 전개 (J1 요 각: 전방 0°, 측방 90°, 대각 45°, 후방 180°).
+        """
+        cases: Dict[str, Tuple[float, float, float]] = {"vehicle_only": (self.robot_mass_kg, 0.0, 0.0)}
+        m_pay = self.arm_mass_kg + self.tool_mass_kg
+        total = self.robot_mass_kg + m_pay
+        cases["transport"] = (total, self.arm_mount_x * m_pay / total, 0.0)     # 접힘: J1 축 위
+        for name, yaw in (("reach_front", 0.0), ("reach_diag", 45.0), ("reach_side", 90.0),
+                          ("reach_rear", 180.0)):
+            c, s = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+            mx = self.arm_mass_kg * (self.arm_mount_x + self.arm_cg_reach * c) \
+                + self.tool_mass_kg * (self.arm_mount_x + self.tool_reach * c)
+            my = (self.arm_mass_kg * self.arm_cg_reach + self.tool_mass_kg * self.tool_reach) * s
+            cases[name] = (total, mx / total, my / total)
+        return cases
+
+    def wheel_loads(self, mass_kg: float, cg_x: float, cg_y: float) -> Dict[str, Dict[str, float]]:
+        """CG 가 (cg_x, cg_y) 인 하중의 좌·우 휠 하중 (N).
+
+        좌우: 차체 하중은 두 로커 피벗(Y=±y_rocker_c)으로 나뉜다.
+        전후: 차체 피치 모멘트 W·cg_x 는 차동 바가 공통 회전을 막으므로 링크를 통해 두 로커에
+        반씩 들어가, 로커 피벗 둘레 평형에서 전방 휠 하중을 바꾼다 (보기 안쪽 분배는 고정비).
+        """
+        w = mass_kg * 9.81
+        y_p = self.derived["y_rocker_c"]
+        x_f, x_m, x_r = self.x_front, self.x_mid, self.x_rear
+        x_b, x_p = self.x_bogie_pivot, self.x_rocker_pivot
+        k = (x_b - x_r) / (x_m - x_b)                    # N_m / N_r
+        m_side = w * cg_x / 2.0                          # N·mm, 앞 숙임 +
+        out: Dict[str, Dict[str, float]] = {}
+        for side, sgn in (("left", 1.0), ("right", -1.0)):
+            w_s = w / 2.0 + sgn * w * cg_y / (2.0 * y_p)
+            n_f = (m_side + w_s * (x_p - x_b)) / (x_f - x_b)
+            n_r = (w_s - n_f) / (1.0 + k)
+            out[side] = {"front": n_f, "mid": k * n_r, "rear": n_r, "per_side": w_s}
+        return out
+
+    def safety_factors(self, cases: Tuple[str, ...] = None) -> Dict[str, float]:
+        """하중 케이스 전체(또는 지정 케이스)·좌우에서 가장 낮은 안전율 (동하중 계수 적용)."""
+        names = cases or tuple(self.load_cases())
+        worst: Dict[str, float] = {}
+        for name in names:
+            for loads in self.wheel_loads(*self.load_cases()[name]).values():
+                for k, v in self._sf_for(loads).items():
+                    worst[k] = min(v, worst.get(k, math.inf))
+        return worst
+
+    def _sf_for(self, loads: Dict[str, float]) -> Dict[str, float]:
+        """한쪽 휠 하중으로 베어링·휠·플레이트·축 안전율을 계산한다."""
         n_max = max(loads["front"], loads["mid"], loads["rear"])
         n_dyn = n_max * self.dynamic_factor
         side_dyn = loads["per_side"] * self.dynamic_factor
@@ -269,17 +341,19 @@ class SuspensionParams:
         sigma_out = m_out * (self.plate_t / 2) / i_out
         sf["rocker_bending_outplane"] = self.yield_mpa / sigma_out
 
-        # 로커 피벗 축: SHF16 클램프 중심 → 로커 베어링 쌍 중심 캔틸레버 (SUS304)
+        # 로커 피벗 축: SHF20 클램프 중심 → 로커 베어링 쌍 중심 캔틸레버 (SUS304)
         y_clamp = self.frame_half_w + self.shf_flange_t + self.shf_boss_len / 2
         brg = BEARINGS[self.rocker_journal_d]
         y_brg = self.derived["y_rocker_in"] + (2 * brg["width"] + 6) / 2
         z_shaft = math.pi * self.rocker_shaft_d ** 3 / 32.0
-        sf["rocker_shaft_at_shf16"] = 205.0 / (side_dyn * (y_brg - y_clamp) / z_shaft)
+        sf["rocker_shaft_at_support"] = 205.0 / (side_dyn * (y_brg - y_clamp) / z_shaft)
 
-        # 전방 스터브 액슬 (SUS304, σy≈205 MPa)
-        overhang = self.derived["y_wheel_c"] - self.derived["y_rocker_c"]
-        z_axle = math.pi * self.axle_d ** 3 / 32.0
-        sf["front_axle"] = 205.0 / (n_dyn * overhang / z_axle)
+        # 전방 허브모터 축: 로커 플레이트 ↔ 외측 포크 단순지지, 휠 중앙 하중 (플랫 폭 원형 단면으로 보수적)
+        a = self.derived["y_wheel_c"] - self.derived["y_rocker_c"]
+        b = self.derived["y_fork_c"] - self.derived["y_wheel_c"]
+        m_axle = loads["front"] * self.dynamic_factor * a * b / (a + b)
+        z_axle = math.pi * self.front_axle_flat ** 3 / 32.0
+        sf["front_axle"] = self.front_axle_yield / (m_axle / z_axle)
         return sf
 
     # ------------------------------------------------------------------
@@ -383,10 +457,18 @@ def report(p: SuspensionParams) -> str:
                  f"Z={p.z_diff_bar:6.1f}   (차동 바 피벗, Z축 회전)")
     lines += ["", "[링크 길이]"]
     lines += [f"  {k:15s}: {v:7.1f}" for k, v in lens.items()]
-    lines += [f"  track_width    : {p.derived['track_width']:7.1f}", "", "[정하중 (한쪽)]"]
+    lines += [f"  track_width    : {p.derived['track_width']:7.1f}", "", "[정하중 (한쪽, 구동체만)]"]
     lines += [f"  {k:9s}: {v:7.1f} N" for k, v in loads.items()]
-    lines += ["", f"[안전율 (동하중 ×{p.dynamic_factor:.0f})]"]
-    lines += [f"  {k:24s}: {v:5.1f}" for k, v in sf.items()]
+    lines += ["", "[하중 케이스 — 휠 하중 N (좌 F/M/R | 우 F/M/R), 최저 안전율]"]
+    for name, (m, x, y) in p.load_cases().items():
+        wl = p.wheel_loads(m, x, y)
+        sf_c = p.safety_factors((name,))
+        worst = min(sf_c, key=sf_c.get)
+        lines.append(f"  {name:13s} {m:5.1f} kg CG({x:6.1f},{y:6.1f})  "
+                     + " | ".join("/".join(f"{wl[s][k]:4.0f}" for k in ("front", "mid", "rear")) for s in wl)
+                     + f"   {worst} {sf_c[worst]:.2f}")
+    lines += ["", f"[안전율 (전 케이스 최저, 동하중 ×{p.dynamic_factor:.0f})]"]
+    lines += [f"  {k:24s}: {v:5.2f}" for k, v in sf.items()]
     return "\n".join(lines)
 
 

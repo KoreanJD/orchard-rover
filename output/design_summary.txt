@@ -1,12 +1,12 @@
 === Rocker-Bogie 설계 요약 (단위 mm, N) ===
 
 [조인트 좌표 XZ, 좌측 Y]
-  P: X=    0.0  Y= 432.0  Z= 300.0
-  F: X=  450.0  Y= 506.0  Z= 125.0
-  M: X=    0.0  Y= 506.0  Z= 125.0
-  R: X= -450.0  Y= 506.0  Z= 125.0
-  B: X= -225.0  Y= 450.0  Z= 200.0
-  U: X=    0.0  Y= 432.0  Z= 750.0
+  P: X=    0.0  Y= 436.0  Z= 300.0
+  F: X=  450.0  Y= 516.0  Z= 125.0
+  M: X=    0.0  Y= 516.0  Z= 125.0
+  R: X= -450.0  Y= 516.0  Z= 125.0
+  B: X= -225.0  Y= 454.0  Z= 200.0
+  U: X=    0.0  Y= 436.0  Z= 750.0
   D: X= -150.0  Y=   0.0  Z= 750.0   (차동 바 피벗, Z축 회전)
 
 [링크 길이]
@@ -16,21 +16,29 @@
   bogie_front    :   237.2
   bogie_rear     :   237.2
   diff_link      :   150.0
-  diff_bar       :   864.0
+  diff_bar       :   872.0
   wheelbase      :   900.0
-  track_width    :  1012.0
+  track_width    :  1032.0
 
-[정하중 (한쪽)]
+[정하중 (한쪽, 구동체만)]
   front    :    98.1 N
   mid      :    98.1 N
   rear     :    98.1 N
   per_side :   294.3 N
 
-[안전율 (동하중 ×3)]
-  rocker_bearing          :  10.8
-  bogie_bearing           :   9.5
-  wheel                   :   5.1
-  rocker_bending_inplane  :  14.0
-  rocker_bending_outplane :   5.6
-  rocker_shaft_at_shf16   :   4.1
-  front_axle              :   3.8
+[하중 케이스 — 휠 하중 N (좌 F/M/R | 우 F/M/R), 최저 안전율]
+  vehicle_only   60.0 kg CG(   0.0,   0.0)    98/  98/  98 |   98/  98/  98   wheel 5.10
+  transport      78.0 kg CG(  69.2,   0.0)   167/ 108/ 108 |  167/ 108/ 108   wheel 3.00
+  reach_front    78.0 kg CG( 178.8,   0.0)   229/  77/  77 |  229/  77/  77   wheel 2.18
+  reach_diag     78.0 kg CG( 146.7,  77.5)   233/ 109/ 109 |  188/  63/  63   wheel 2.14
+  reach_side     78.0 kg CG(  69.2, 109.6)   199/ 140/ 140 |  135/  76/  76   wheel 2.51
+  reach_rear     78.0 kg CG( -40.4,   0.0)   105/ 139/ 139 |  105/ 139/ 139   wheel 3.60
+
+[안전율 (전 케이스 최저, 동하중 ×3)]
+  rocker_bearing          :  8.52
+  bogie_bearing           :  6.67
+  wheel                   :  2.14
+  rocker_bending_inplane  :  8.00
+  rocker_bending_outplane :  2.74
+  rocker_shaft_at_support :  4.15
+  front_axle              :  2.72
