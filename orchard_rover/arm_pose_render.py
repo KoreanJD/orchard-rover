@@ -60,35 +60,31 @@ def load_home_staged() -> Dict[int, List[cq.Shape]]:
     return _HOME_CACHE
 
 
-def pose_arm(q: Dict[str, float]) -> Dict[int, List[cq.Shape]]:
-    """관절각 q (deg) 로 자세를 만든 형상을 단계별로 반환."""
-    w = WristParams(x_j3=UPPER_LEN, x_flange=UPPER_LEN + 450 + 100)
-    ax = wrist_axes(w)
+def place(shape: cq.Shape, stage: int, q: Dict[str, float]) -> cq.Shape:
+    """팔 좌표계 홈 자세 형상을 체인 단계 stage 기준으로 관절각 q (deg) 자세로 옮긴다.
+
+    하류 → 상류 순으로 적용 (각 관절 축은 그 시점의 홈 좌표). J1 요는 모든 단계에 적용.
+    """
+    ax = wrist_axes(WristParams(x_j3=UPPER_LEN, x_flange=UPPER_LEN + 450 + 100))
     x_j3, x_j5, x_fl = UPPER_LEN, ax["J5_pitch_x"], ax["flange_x"]
-    staged = {k: list(v) for k, v in load_home_staged().items()}
-
-    def rot(shape: cq.Shape, origin, axis, deg: float) -> cq.Shape:
-        if abs(deg) < 1e-9:
-            return shape
-        o = cq.Vector(*origin)
-        return shape.rotate(o, o + cq.Vector(*axis), deg)
-
-    # 하류 → 상류 순으로 적용 (각 관절 축은 그 시점의 홈 좌표)
-    joints = [  # (단계 이상 회전, origin, axis, 각)
+    joints = [  # (이 단계 이상 회전, origin, axis, 각)
         (5, (x_fl, 0, 0), (1, 0, 0), q.get("J6", 0)),
         (4, (x_j5, 0, 0), (0, 1, 0), -q.get("J5", 0)),
         (3, (x_j3 + 100, 0, 0), (1, 0, 0), q.get("J4", 0)),
         (2, (x_j3, 0, 0), (0, 1, 0), -q.get("J3", 0)),
         (1, (0, 0, 0), (0, 1, 0), -q.get("J2", 0)),
+        (0, (0, 0, 0), (0, 0, 1), q.get("J1", 0)),
     ]
     for min_stage, origin, axis, deg in joints:
-        for st in range(min_stage, 6):
-            staged[st] = [rot(s, origin, axis, deg) for s in staged[st]]
-    # J1 요 (전체)
-    if q.get("J1", 0):
-        for st in range(6):
-            staged[st] = [rot(s, (0, 0, 0), (0, 0, 1), q["J1"]) for s in staged[st]]
-    return staged
+        if stage >= min_stage and abs(deg) > 1e-9:
+            o = cq.Vector(*origin)
+            shape = shape.rotate(o, o + cq.Vector(*axis), deg)
+    return shape
+
+
+def pose_arm(q: Dict[str, float]) -> Dict[int, List[cq.Shape]]:
+    """관절각 q (deg) 로 자세를 만든 형상을 단계별로 반환."""
+    return {st: [place(s, st, q) for s in shapes] for st, shapes in load_home_staged().items()}
 
 
 def _tris(shape: cq.Shape, tol: float = 2.0):

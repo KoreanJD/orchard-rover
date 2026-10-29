@@ -1,0 +1,38 @@
+=== 관절 가동 범위 간섭 검토 (부품 단위, 간섭 > 1 mm³) ===
+부품 80, 홈 접촉 제외 쌍 20
+
+[A] 단일 관절 스윕 (10° 간격, 나머지 0): 171 자세, 충돌 0
+
+[B] 조합 자세: 210 자세, 충돌 29 (운용 제약)
+ B:J1xJ2xJ3: 충돌 13/54
+   J1=-180 J2=-20 J3=+0         rover:diff_post↔fore_plate_J3 10716 외 19
+   J1=-180 J2=-20 J3=-120       rover:diff_post↔fore_plate_J3 11531 외 19
+   J1=-135 J2=-20 J3=+0         rover:diff_bar↔j4_housing 11750 외 9
+   J1=-90 J2=-20 J3=-120        rover:frame_ref↔j4_housing 40913 외 8
+   J1=-90 J2=+0 J3=-120         rover:frame_ref↔forearm_tube 5451 외 1
+   J1=-45 J2=-20 J3=-120        rover:frame_ref↔j4_housing 564
+   J1=+45 J2=-20 J3=-120        rover:frame_ref↔j4_housing 564
+   J1=+90 J2=-20 J3=-120        rover:frame_ref↔j4_housing 40913 외 8
+   J1=+90 J2=+0 J3=-120         rover:frame_ref↔forearm_tube 5451 외 1
+   J1=+135 J2=-20 J3=+0         rover:diff_bar↔j4_housing 11750 외 11
+   J1=+135 J2=-20 J3=-120       rover:frame_ref↔J3_ring 2654 외 2
+   J1=+180 J2=-20 J3=+0         rover:diff_post↔fore_plate_J3 10716 외 19
+   J1=+180 J2=-20 J3=-120       rover:diff_post↔fore_plate_J3 11531 외 19
+ B:J2xJ3: 충돌 1/68
+   J2=-20 J3=-105               rover:frame_ref↔iso_flange 39
+ B:J3xJ4xJ5: 충돌 15/88
+   J3=-120 J4=+0 J5=-110        rover:frame_ref↔iso_flange 583
+   J3=-120 J4=+0 J5=-88         rover:frame_ref↔iso_flange 1
+   J3=-120 J4=+180 J5=+88       rover:frame_ref↔iso_flange 1
+   J3=-120 J4=+180 J5=+110      rover:frame_ref↔iso_flange 583
+   J3=-120 J4=-90 J5=-110       rover:frame_ref↔j5_motor 168
+   J3=-120 J4=-90 J5=-88        rover:frame_ref↔j5_motor 168
+   J3=-120 J4=-90 J5=-66        rover:frame_ref↔j5_motor 168
+   J3=-120 J4=-90 J5=-44        rover:frame_ref↔j5_motor 168
+   J3=-120 J4=-90 J5=-22        rover:frame_ref↔j5_motor 168
+   J3=-120 J4=-90 J5=+0         rover:frame_ref↔j5_motor 168
+   J3=-120 J4=-90 J5=+22        rover:frame_ref↔j5_motor 168
+   J3=-120 J4=-90 J5=+44        rover:frame_ref↔j5_motor 168
+   J3=-120 J4=-90 J5=+66        rover:frame_ref↔j5_motor 168
+   J3=-120 J4=-90 J5=+88        rover:frame_ref↔j5_motor 168
+   J3=-120 J4=-90 J5=+110       rover:frame_ref↔j5_motor 168

@@ -180,6 +180,23 @@ def make_bogie_shaft(p: SuspensionParams) -> cq.Workplane:
     return cq.Workplane("XZ").circle(p.bogie_shaft_d / 2).extrude(-length)
 
 
+def make_bearing_pair(bore: float, gap: float, plane: str = "XZ") -> cq.Workplane:
+    """깊은홈 볼베어링 2개 (내경 bore, 사이 간격 gap) — 축 방향 0 → 2W+gap.
+
+    외경은 하우징 압입 포켓(OD − 0.01)과 같게 두어 모델상 접촉으로 표현한다.
+    plane "XZ" 는 +Y 방향, "XY" 는 +Z 방향으로 쌓는다.
+    """
+    brg = BEARINGS[bore]
+    out = None
+    for k in range(2):
+        ring = cq.Workplane(plane).circle((brg["od"] - 0.01) / 2).circle(bore / 2)
+        ring = ring.extrude(-brg["width"] if plane == "XZ" else brg["width"])
+        off = k * (brg["width"] + gap)
+        ring = ring.translate((0, off, 0) if plane == "XZ" else (0, 0, off))
+        out = ring if out is None else out.union(ring)
+    return out
+
+
 def make_axle(p: SuspensionParams, overhang: float) -> cq.Workplane:
     """휠 스터브 액슬 SFJ16 — 플레이트 내측면에서 휠 외측면까지."""
     length = overhang + WHEELS[p.wheel_d]["width"] / 2 + 8
@@ -319,6 +336,8 @@ def _side(p: SuspensionParams, side: float, theta: float,
     # --- 보기 그룹 (B 기준, 로커 회전 상쇄) ---
     bogie_grp: Dict[str, Tuple[cq.Workplane, cq.Color]] = {
         "bogie_plate": (_place_y(parts["bogie_plate"], d["y_bogie_in"], p.plate_t), COLORS["bogie"]),
+        # 보기 보스 6001ZZ ×2 (간격 4) — 보기 축 위
+        "bogie_bearing": (parts["bogie_bearing"].translate((bx, d["y_bogie_in"], bz)), COLORS["pivot"]),
     }
     for key in ("M", "R"):
         bogie_grp[f"axle_{key}"] = (
@@ -337,6 +356,8 @@ def _side(p: SuspensionParams, side: float, theta: float,
     shapes["rocker_shaft"] = (parts["rocker_shaft"].translate((px, p.frame_half_w, pz)), COLORS["pivot"])
     y_collar = d["y_rocker_in"] + p.plate_t + (2 * BEARINGS[p.rocker_journal_d]["width"] + 6 - p.plate_t) + 1
     shapes["shaft_collar"] = (parts["shaft_collar"].translate((px, y_collar, pz)), COLORS["pivot"])
+    # 로커 보스 6003ZZ ×2 (간격 6) — 축 저널 위 (회전 대칭이라 로커 각과 무관)
+    shapes["rocker_bearing"] = (parts["rocker_bearing"].translate((px, d["y_rocker_in"], pz)), COLORS["pivot"])
 
     sub = cq.Assembly(name=f"suspension_{tag}")
     for name, (obj, col) in shapes.items():
@@ -368,6 +389,8 @@ def build_assembly(p: SuspensionParams, theta_left: float = 0.0) -> cq.Assembly:
         "diff_post": make_diff_post(p),
         "link_rod": make_link_rod(p),
         "frame": make_frame_reference(p),
+        "rocker_bearing": make_bearing_pair(p.rocker_journal_d, 6.0),
+        "bogie_bearing": make_bearing_pair(p.bogie_shaft_d, 4.0),
     }
     parts["rocker_shaft"] = make_rocker_shaft(p)
     parts["rocker_shaft_len"] = p.pivot_block_t + 2 * brg16["width"] + 6 + 12
@@ -391,6 +414,9 @@ def build_assembly(p: SuspensionParams, theta_left: float = 0.0) -> cq.Assembly:
             name="diff_post", color=COLORS["frame"])
     asm.add(parts["diff_bar"], name="diff_bar", color=COLORS["diff"],
             loc=cq.Location(cq.Vector(xd, 0, p.z_diff_bar), cq.Vector(0, 0, 1), math.degrees(phi)))
+    # 차동 바 허브 6001ZZ ×2 (간격 4) — 포스트 Ø12 핀 위, 허브 하단(바 하면)부터
+    asm.add(make_bearing_pair(12, 4.0, "XY").translate((xd, 0, p.z_diff_bar - p.diff_bar_t / 2)),
+            name="diff_bearing", color=COLORS["pivot"])
     for side, th in ((+1.0, theta_left), (-1.0, theta_right)):
         ux, uz = p.upright_top(th)
         uy = side * d["y_rocker_c"]

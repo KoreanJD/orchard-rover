@@ -150,17 +150,34 @@ def make_cycloid_disc(c: CycloidParams) -> cq.Workplane:
     return disc
 
 
-def make_ring_housing(c: CycloidParams, length: float) -> cq.Workplane:
-    """핀 링 하우징 — 외경 R+Rr+벽, 핀 N개 (Ø2Rr) 일체 표현."""
+def make_ring_housing(c: CycloidParams, p: ShoulderParams) -> cq.Workplane:
+    """핀 링 하우징 — 외경 R+Rr+벽, 핀 N개 (Ø2Rr) 일체 + 출력 베어링 외륜 시트.
+
+    Z=0 은 어댑터 상면(밀착). 핀 구간은 디스크 2장 + 양측 간극 1, 그 위로 출력 베어링
+    외륜을 받는 시트(보어 = 베어링 OD)가 베어링 폭 −0.5 까지 — 회전하는 플랜지 캡과 0.5 간극.
+    """
     r_out = c.r_pin_circle + c.r_pin + c.housing_t
-    ring = cq.Workplane("XY").circle(r_out).circle(c.r_pin_circle + c.r_pin + 0.3).extrude(length)
+    l_pin = 2 * c.disc_t + 4
+    ib, ob, wb = p.output_bearing
+    ring = cq.Workplane("XY").circle(r_out).circle(c.r_pin_circle + c.r_pin + 0.3).extrude(l_pin)
+    seat = cq.Workplane("XY").circle(r_out).circle(ob / 2).extrude(wb - 0.5).translate((0, 0, l_pin))
     pins = None
     for k in range(c.pins):
         a = 2 * math.pi * k / c.pins
-        p = (cq.Workplane("XY").center(c.r_pin_circle * math.cos(a), c.r_pin_circle * math.sin(a))
-             .circle(c.r_pin).extrude(length))
-        pins = p if pins is None else pins.union(p)
-    return ring.union(pins)
+        pn = (cq.Workplane("XY").center(c.r_pin_circle * math.cos(a), c.r_pin_circle * math.sin(a))
+              .circle(c.r_pin).extrude(l_pin))
+        pins = pn if pins is None else pins.union(pn)
+    return ring.union(seat).union(pins)
+
+
+def make_cam_bearings(c: CycloidParams) -> cq.Workplane:
+    """편심 캠 베어링 6002 ×2 (ID 15 / OD 32, 디스크 두께 폭) — 캠 로브와 디스크 보어 사이."""
+    out = None
+    for i, x in enumerate((c.ecc, -c.ecc)):
+        b = (cq.Workplane("XY").center(x, 0).circle(c.d_cam_bearing / 2 - 0.005).circle(15.0)
+             .extrude(c.disc_t).translate((0, 0, i * c.disc_t)))
+        out = b if out is None else out.union(b)
+    return out
 
 
 def make_eccentric_cam(c: CycloidParams, shaft_d: float) -> cq.Workplane:
@@ -180,7 +197,10 @@ def make_output_flange(c: CycloidParams, p: ShoulderParams) -> cq.Workplane:
     t = 10.0
     fl = cq.Workplane("XY").circle(ib / 2).extrude(wb + t)          # 베어링 저널
     cap = cq.Workplane("XY").circle(ob / 2 + 12).extrude(t).translate((0, 0, wb))
-    fl = fl.union(cap)
+    # 캡 하면 릴리프 0.5: 베어링 내륜만 누르고 외륜·하우징 시트와는 간극
+    relief = (cq.Workplane("XY").circle(ob / 2 + 12).circle((ib + ob) / 4).extrude(0.5)
+              .translate((0, 0, wb)))
+    fl = fl.union(cap.cut(relief))
     pins = None
     for k in range(c.n_out_pins):
         a = 2 * math.pi * k / c.n_out_pins
@@ -268,7 +288,7 @@ def build(p: ShoulderParams) -> Tuple[cq.Assembly, Dict[str, cq.Workplane]]:
     c = p.cyc
     parts = {
         "cycloid_disc": make_cycloid_disc(c),
-        "ring_housing": make_ring_housing(c, 2 * c.disc_t + 2),
+        "ring_housing": make_ring_housing(c, p),
         "eccentric_cam": make_eccentric_cam(c, p.motor_shaft_d),
         "output_flange": make_output_flange(c, p),
         "nema23_brake": make_nema23(p),
@@ -280,8 +300,9 @@ def build(p: ShoulderParams) -> Tuple[cq.Assembly, Dict[str, cq.Workplane]]:
     adapter = (cq.Workplane("XY").circle(adapter_radius(p)).extrude(ADAPTER_T)
                .faces(">Z").workplane().circle(20).cutThruAll())
     asm.add(adapter, name="adapter", color=cq.Color(0.6, 0.6, 0.62))
-    asm.add(parts["ring_housing"].translate((0, 0, z_disc0 - 1)), name="ring", color=cq.Color(0.55, 0.55, 0.6))
+    asm.add(parts["ring_housing"].translate((0, 0, ADAPTER_T)), name="ring", color=cq.Color(0.55, 0.55, 0.6))
     asm.add(parts["eccentric_cam"].translate((0, 0, z_disc0)), name="cam", color=cq.Color(0.85, 0.7, 0.1))
+    asm.add(make_cam_bearings(c).translate((0, 0, z_disc0)), name="cam_bearing", color=cq.Color(0.8, 0.8, 0.8))
     d1 = parts["cycloid_disc"].translate((c.ecc, 0, z_disc0))
     d2 = parts["cycloid_disc"].rotate((0, 0, 0), (0, 0, 1), c.disc2_phase).translate((-c.ecc, 0, z_disc0 + c.disc_t))
     asm.add(d1, name="disc1", color=cq.Color(0.85, 0.3, 0.3))

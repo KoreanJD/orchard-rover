@@ -55,7 +55,7 @@ def gas_spring_posed(q: Dict[str, float]) -> cq.Shape:
     """
     p2 = ShoulderParams()
     y = gas_spring_y(p2)
-    th = math.radians(q["J2"])
+    th = math.radians(q.get("J2", 0.0))
     a0 = cq.Vector(0, y, -p2.gs_h)
     a1 = cq.Vector(p2.gs_r * math.cos(th), y, p2.gs_r * math.sin(th))
     v = a1 - a0

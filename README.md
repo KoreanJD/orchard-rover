@@ -26,7 +26,8 @@ orchard_rover/
   arm_pose_render.py       자세별 컬러 렌더 (matplotlib)
   cable_routing.py         케이블 번들 산정·관절별 여유 길이·드럼 경로
   transport_check.py       운반 자세 간섭 검토 (OCC 최소 거리)
-tests/                     pytest 34개
+  motion_check.py          관절 가동 범위 간섭 검토 (부품 단위, 단일 관절 스윕 + 조합 자세)
+tests/                     pytest 47개 (지지 경로·가동 범위 포함)
 docs/                      설계 기록 (서스펜션 / 팔 사양 / 케이블 라우팅)
 output/                    생성물: STEP · STL · DXF · PNG · GIF · 보고서
 ```
@@ -48,6 +49,7 @@ python -m orchard_rover.base_joint                      # 구동체 + J1 + 팔 �
 python -m orchard_rover.arm_workspace                   # 작업 영역 그림·궤적 키프레임
 python -m orchard_rover.cable_routing                   # 케이블 보고서
 python -m orchard_rover.transport_check                 # 운반 자세 간섭
+python -m orchard_rover.motion_check                    # 관절 가동 범위 간섭
 pytest
 ```
 
