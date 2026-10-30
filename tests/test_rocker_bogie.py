@@ -206,3 +206,46 @@ def test_assembly_builds_at_pose(params: SuspensionParams) -> None:
     n0 = len(build_assembly(params, 0.0).toCompound().Solids())
     n1 = len(build_assembly(params, math.radians(12)).toCompound().Solids())
     assert n0 == n1 > 20
+
+
+# ---------------------------------------------------------------------------
+# MISUMI 표준품 체결 (HFS5-4040 홈 2줄: 면 중심 ±10, T너트 M5 까지)
+# ---------------------------------------------------------------------------
+def test_pivot_holder_bolts_on_rail_slot(params: SuspensionParams) -> None:
+    """SHF20 볼트 줄(피벗 축 높이)이 하단 레일 측면의 홈 중심선 위."""
+    assert params.z_rocker_pivot == pytest.approx(params.z_frame_low_rail - params.hfs5_slot_offset)
+
+
+def test_shf20_catalog_length(params: SuspensionParams) -> None:
+    """SHF20 축방향 전체 길이 T = 20 (플랜지 t8 포함)."""
+    assert params.pivot_block_t == pytest.approx(20.0)
+    assert params.shf_flange_t == pytest.approx(8.0)
+
+
+def test_diff_post_bolts_on_crossmember_slots(params: SuspensionParams) -> None:
+    """차동 포스트 볼트 홀이 크로스멤버(Y 방향) 상면 홈 X ±10 위, M5 (Ø5.5)."""
+    from OCP.BRepAdaptor import BRepAdaptor_Surface
+
+    from orchard_rover.rocker_bogie_cad import make_diff_post
+
+    holes = set()
+    for f in make_diff_post(params).val().Faces():
+        if f.geomType() == "CYLINDER":
+            c = BRepAdaptor_Surface(f.wrapped).Cylinder()
+            if abs(c.Radius() - 2.75) < 1e-6:
+                holes.add((round(c.Location().X(), 3), round(c.Location().Y(), 3)))
+    assert len(holes) == 4
+    assert all(abs(abs(x) - params.hfs5_slot_offset) < 1e-6 for x, _ in holes)
+
+
+def test_base_plate_bolts_on_slots(params: SuspensionParams) -> None:
+    """J1 베이스 플레이트 볼트가 레일(Y ±380)·크로스멤버(X ±60) 홈 중심선(±10) 위."""
+    from orchard_rover.base_joint import BaseJointParams, base_plate_bolts
+
+    b, s = BaseJointParams(), params.hfs5_slot_offset
+    rail_c = params.frame_half_w - params.frame_profile / 2
+    for x, y in base_plate_bolts(b):
+        if abs(y) > rail_c - params.frame_profile:
+            assert abs(abs(y) - rail_c) == pytest.approx(s)
+        else:
+            assert abs(abs(x) - b.crossmember_dx) == pytest.approx(s)

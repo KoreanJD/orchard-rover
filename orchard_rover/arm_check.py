@@ -12,7 +12,9 @@ from typing import Dict, List, Tuple
 G = 9.81
 E_AL = 69_000.0        # MPa (6061-T6)
 YIELD_AL = 276.0       # MPa (6061-T6)
-I_HFS5_3030 = 28_000.0  # mm^4, HFS5-3030 단면 2차 모멘트 (카탈로그 Ix≈2.8 cm^4)
+I_HFS6_3030 = 28_300.0  # mm^4, MISUMI HFS6-3030 단면 2차 모멘트 (카탈로그 2.83×10⁴)
+A_HFS6_3030 = 333.0     # mm², 단면적 (0.9 kg/m)
+I_FORE_TUBE = math.pi / 64 * (50.0 ** 4 - 46.0 ** 4)   # mm^4, 전완 Al 튜브 Ø50×2t
 DYN = 1.5              # 동적 계수 (관절 액추에이터 선정과 동일)
 
 
@@ -26,7 +28,7 @@ class Segment:
 
 # 어깨 축 기준 직렬 질량 분포 (수평 전개)
 SEGMENTS: List[Segment] = [
-    Segment("upper_arm_link", 500, 1.6),    # HFS5-3030×2 (0.51 kg/m×1.0) + 조인트 플레이트
+    Segment("upper_arm_link", 500, 1.6),    # HFS6-3030×2 (0.9 kg/m × 0.33 m ×2 = 0.59) + 측판 2장
     Segment("elbow_actuator", 0, 2.4),       # NEMA23 1.3 + 사이클로이드 1:45 1.0 + 하우징
     Segment("j4_roll_actuator", 40, 0.9),    # 6축: 전완 롤 NEMA17 + 1:36 유성 (팔꿈치 직후, 질량 안쪽)
     Segment("forearm_link", 410, 1.0),       # Al 튜브 Ø50×2t (롤 회전부)
@@ -93,11 +95,11 @@ def joint_capacity(holding: float, ratio: float, joint_deg_s: float,
 
 
 def tip_deflection() -> Dict[str, float]:
-    """상완(사다리형 2본, 간격 60)과 전완(1본) 캔틸레버 처짐, 툴 3 kg + 자중."""
+    """상완(HFS6-3030 사다리 2본, 간격 60)과 전완(Al 튜브 Ø50×2t) 캔틸레버 처짐, 툴 3 kg + 자중."""
     p_tip = 3.0 * G + 1.8 * G           # 툴 + 손목부
     # 상완: 2본 평행, 간격 d=60 → I = 2(I0 + A·(d/2)^2), A≈ 3.2 cm^2 = 320 mm^2
-    i_upper = 2 * (I_HFS5_3030 + 320.0 * 30.0 ** 2)
-    i_fore = I_HFS5_3030
+    i_upper = 2 * (I_HFS6_3030 + A_HFS6_3030 * 30.0 ** 2)
+    i_fore = I_FORE_TUBE
     l_u, l_f = 500.0, 450.0
     # 전완 자체 처짐 (끝 하중) + 상완 처짐이 전완 끝까지 기울기로 전파
     m_fore_end = p_tip

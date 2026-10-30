@@ -91,8 +91,8 @@ def plot_workspace(out: Path) -> Dict[str, float]:
     pts = workspace(50)
     fig, ax = plt.subplots(figsize=(12, 8), dpi=110)
     ax.scatter(pts[:, 0] / 1000, pts[:, 1] / 1000, s=1, c="#2a7fd4", alpha=0.25, label="tool-tip reachable set")
-    # 구동체 외형 (프레임 280~720, 휠)
-    ax.add_patch(Rectangle((-0.5, 0.28), 1.0, 0.44, fill=False, lw=1.5, color="k"))
+    # 구동체 외형 (프레임 290~720, 휠)
+    ax.add_patch(Rectangle((-0.5, 0.29), 1.0, 0.43, fill=False, lw=1.5, color="k"))
     for wx in (-0.45, 0.0, 0.45):
         ax.add_patch(plt.Circle((wx, 0.125), 0.125, fill=False, color="k"))
     ax.plot(J2_ORIGIN[0] / 1000, J2_ORIGIN[2] / 1000, "r+", ms=14, mew=2, label="J2 axis")
@@ -158,10 +158,10 @@ def animate(out_gif: Path, out_png_dir: Path, steps: int = 8) -> List[Tuple[str,
         X, Y = np.meshgrid([-700, 2200], [-900, 900])
         ax3.plot_surface(X, Y, np.zeros_like(X), color="#d9c9a3", alpha=0.35)
         bx = [-500, 500, 500, -500, -500]; by = [-400, -400, 400, 400, -400]
-        for z in (280, 720):
+        for z in (290, 720):
             ax3.plot(bx, by, [z] * 5, color="k", lw=1)
         for x, y in zip(bx[:4], by[:4]):
-            ax3.plot([x, x], [y, y], [280, 720], color="k", lw=1)
+            ax3.plot([x, x], [y, y], [290, 720], color="k", lw=1)
         # 나무: 줄기 + 수관(점군)
         ax3.plot([1300, 1300], [0, 0], [0, 600], color="#8b5a2b", lw=6)
         th = np.linspace(0, 2 * math.pi, 40); ph = np.linspace(0, math.pi, 20)

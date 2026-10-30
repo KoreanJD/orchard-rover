@@ -134,10 +134,10 @@ def make_bogie_plate(p: SuspensionParams) -> cq.Workplane:
 
 
 def make_pivot_block(p: SuspensionParams) -> cq.Workplane:
-    """로커 피벗 서포트 — MISUMI SHF20 플랜지형 샤프트 서포트 (표준품, 단순화 형상).
+    """로커 피벗 서포트 — MISUMI SHF20 플랜지형 샤프트 홀더 (주조품, 단순화 형상).
 
-    플랜지 W60×T8, 보스 L20, 볼트 홀 Ø7 ×2 (간격 48, X 방향)
-    → HFS5-4040 측면 레일 외측면의 슬롯 하나에 T-너트 2개로 체결 (M6 너트 호환은 카탈로그 확인).
+    L60 × t8 플랜지 + 보스 (축방향 전체 T20), 볼트 홀 Ø7 ×2 (간격 48, X 방향, 축 중심 높이)
+    → HFS5-4040 측면 하단 레일 외측면의 아래 홈(Z 300)에 M5 + 와셔 + HNTT5-5 ×2 로 체결.
     Ø20 축은 M5 클램프 스크류로 고정 (축 고정, 로커가 베어링으로 회전).
     """
     t, boss, w, pitch = p.shf_flange_t, p.shf_boss_len, p.shf_flange_w, p.shf_hole_pitch
@@ -156,13 +156,13 @@ def make_pivot_block(p: SuspensionParams) -> cq.Workplane:
 
 
 def make_shaft_collar(p: SuspensionParams) -> cq.Workplane:
-    """세트 칼라 SCS20 (Ø20 축 빠짐 방지)."""
+    """세트 칼라 PSCS20-12 (슬릿, Ø20 축 빠짐 방지)."""
     return (cq.Workplane("XZ").circle(p.collar_od / 2).circle(p.rocker_shaft_d / 2 + 0.01)
             .extrude(-p.collar_w))
 
 
 def make_rocker_shaft(p: SuspensionParams) -> cq.Workplane:
-    """로커 피벗 축 — SHF20 클램프 | 6004ZZ ×2 저널 | SCS20 칼라 (저널경 = 축경이면 직선축).
+    """로커 피벗 축 — SHF20 클램프 | 6004ZZ ×2 저널 | PSCS20 칼라 (저널경 = 축경이면 직선축).
 
     저널이 굵으면 단붙이: 베어링은 바깥 끝으로 넘겨 끼우고 안쪽 단차가 내측 베어링 내륜을 받친다.
     """
@@ -281,12 +281,16 @@ def make_diff_bar(p: SuspensionParams) -> cq.Workplane:
 
 
 def make_diff_post(p: SuspensionParams) -> cq.Workplane:
-    """차동 바 피벗 포스트 — 상부 크로스멤버(HFS5-4040) 위에 M8 체결, Ø12 수직 핀."""
+    """차동 바 피벗 포스트 — 상부 크로스멤버(HFS5-4040, Y 방향) 위 M5 ×4, Ø12 수직 핀.
+
+    체결 홀은 크로스멤버 상면 홈 2줄(X ±10)에 Y ±22 (시리즈 5 T너트는 M5 까지).
+    """
     height = p.z_diff_bar - p.diff_bar_t / 2 - (p.z_frame_top_rail + p.frame_profile / 2)
     post = (cq.Workplane("XY").rect(80, 60).extrude(10)            # 베이스 플레이트
             .faces(">Z").workplane().circle(16).extrude(height - 10 - 2))
-    post = (post.faces("<Z").workplane().pushPoints([(-30, 0), (30, 0)])
-            .circle(4.3).cutThruAll())
+    slot = p.hfs5_slot_offset
+    post = post.cut(cq.Workplane("XY").pushPoints([(sx * slot, sy * 22.0) for sx in (1, -1) for sy in (1, -1)])
+                    .circle(2.75).extrude(12).translate((0, 0, -1)))
     pin = cq.Workplane("XY").circle(6).extrude(height + 2 * BEARINGS[12]["width"] + 8)
     return post.union(pin)
 

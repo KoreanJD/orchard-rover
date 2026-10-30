@@ -29,7 +29,7 @@ orchard_rover/
   motion_check.py          관절 가동 범위 간섭 검토 (부품 단위, 단일 관절 스윕 + 조합 자세)
   plate_dxf.py             팔·J1 판재 부품 가공 도면 DXF
   urdf_export.py           MoveIt2 용 URDF·SRDF·링크 STL (output/urdf/orchard_rover_description)
-tests/                     pytest 62개 (지지 경로·가동 범위·부품 강도·DXF 포함·URDF 순기구학)
+tests/                     pytest 66개 (지지 경로·가동 범위·부품 강도·DXF 포함·URDF 순기구학)
 docs/                      설계 기록 (서스펜션 / 팔 사양 / 케이블 라우팅)
 output/                    생성물: STEP · STL · DXF · PNG · GIF · 보고서
 ```
@@ -63,9 +63,9 @@ pytest
 
 | 항목 | 값 |
 |---|---|
-| 프레임 | 1000×800, HFS5-4040, 지상고 280 |
+| 프레임 | 1000×800, HFS5-4040, 지상고 290 |
 | 휠 | 10" (Ø250) ×6, 전방 2 BLDC 허브모터 36 V 350 W |
-| 휠베이스 / 트랙 | 900 / 1032 |
+| 휠베이스 / 트랙 | 900 / 1016 |
 | 팔 | 6R, 상완 500 / 전완 422 / 손목 128, 자중 ≈ 15 kg |
 | J2 / J3 | NEMA23 + 사이클로이드 1:50 / 1:45 + 브레이크, J2 가스 스프링 350 N |
 | 툴 인터페이스 | ISO 9409-1-50-4-M6, 36 V + CAN, 집게 / 전동 가위 / 예초기 |

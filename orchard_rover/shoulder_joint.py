@@ -90,7 +90,7 @@ class ShoulderParams:
     output_bearing: Tuple[float, float, float] = (65.0, 85.0, 10.0)  # 61813 류: ID, OD, W
     flange_bolt_pcd: float = 90.0   # 출력 플랜지 → 상완 측판 M6 ×6
     arm_plate_t: float = 12.0
-    arm_plate_gap: float = 60.0     # 상완 플레이트 간 간격 (HFS5-3030 2본 사이)
+    arm_plate_gap: float = 60.0     # 상완 플레이트 간 간격 (HFS6-3030 2본 사이)
     name: str = "J2_shoulder"
     has_gas_spring: bool = True
     motor_holding: float = 4.0      # N·m

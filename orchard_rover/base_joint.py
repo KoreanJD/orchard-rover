@@ -55,16 +55,29 @@ def z_rail_top(p: SuspensionParams) -> float:
     return p.z_frame_top_rail + p.frame_profile / 2
 
 
+def base_plate_bolts(b: BaseJointParams):
+    """베이스 플레이트 M5 체결점 (플레이트 중심 기준 XY).
+
+    좌우 상단 레일(중심 Y ±380)은 안쪽 홈 Y ±370, 크로스멤버(중심 X ±60)는 바깥 홈 X ±70.
+    """
+    slot = SuspensionParams().hfs5_slot_offset
+    rail_y = 380.0 - slot
+    cm_x = b.crossmember_dx + slot
+    pts = [(x, y) for x in (-70.0, 0.0, 70.0) for y in (rail_y, -rail_y)]
+    pts += [(x, y) for x in (-cm_x, cm_x) for y in (-250.0, -120.0, 120.0, 250.0)]
+    return pts
+
+
 def make_base_plate(b: BaseJointParams) -> cq.Workplane:
-    """베이스 플레이트: 중앙 감속기 출력 관통, 베어링 외륜 자리, M8 레일 체결 홀."""
+    """베이스 플레이트: 중앙 감속기 출력 관통, 베어링 외륜 자리, 레일·크로스멤버 체결 홀.
+
+    HFS5-4040 상면 홈 2줄(중심 ±10)에 맞춘 M5 (Ø5.5) — 시리즈 5 T너트(HNTT5)는 M5 까지.
+    """
     pl = (cq.Workplane("XY").rect(b.plate_x, b.plate_y).extrude(b.plate_t).edges("|Z").fillet(10))
     pl = pl.faces(">Z").workplane().circle(b.gearbox_d / 2 + 1).cutThruAll()
     # 베어링 외륜 받침 턱 (OD + 0.02 포켓, 깊이 4)
     pl = pl.faces(">Z").workplane().circle(b.bearing[1] / 2 + 0.01).cutBlind(-4)
-    rail_y = 380.0
-    pts = [(x, y) for x in (-70, 0, 70) for y in (rail_y, -rail_y)]
-    pts += [(x, y) for x in (-b.crossmember_dx, b.crossmember_dx) for y in (-250, -120, 120, 250)]
-    pl = pl.faces(">Z").workplane().pushPoints(pts).circle(4.3).cutThruAll()
+    pl = pl.faces(">Z").workplane().pushPoints(base_plate_bolts(b)).circle(2.75).cutThruAll()
     # 베어링 외륜 체결 M5 ×8 @PCD (OD−10)
     pcd = (b.bearing[1] - 10) / 2
     pl = pl.faces(">Z").workplane().pushPoints(
