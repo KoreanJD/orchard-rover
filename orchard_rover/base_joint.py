@@ -24,7 +24,7 @@ import cadquery as cq
 from orchard_rover.arm_assembly import _cut_y, build_arm, gas_spring_y
 from orchard_rover.rocker_bogie_cad import build_assembly as build_rover
 from orchard_rover.rocker_bogie_params import SuspensionParams
-from orchard_rover.shoulder_joint import (ADAPTER_T, ShoulderParams, adapter_radius, gas_spring_balance,
+from orchard_rover.shoulder_joint import (ADAPTER_T, ShoulderParams, adapter_radius, gas_spring_arm_anchor,
                                           make_gas_spring)
 
 
@@ -173,20 +173,22 @@ def build_j1(b: BaseJointParams, p: SuspensionParams, p2: ShoulderParams) -> Tup
     z_top = z_turret + b.turret_t
     asm.add(make_shoulder_bracket(b, p2).translate((x, 0, z_top)), name="shoulder_bracket",
             color=cq.Color(0.85, 0.3, 0.3))
-    # 가스 스프링 베이스 클레비스: J2 축 아래 gs_h, 팔 가스 스프링 평면
-    asm.add(make_gs_clevis(b, b.shoulder_rise - p2.gs_h).translate((x, gas_spring_y(p2), z_top)),
+    # 가스 스프링 베이스 클레비스: 팔 좌표 gs_base (J2 축 기준), 팔 가스 스프링 평면
+    bx, bz = p2.gs_base
+    asm.add(make_gs_clevis(b, b.shoulder_rise + bz).translate((x + bx, gas_spring_y(p2), z_top)),
             name="gs_clevis", color=cq.Color(0.4, 0.4, 0.45))
     return asm, z_top + b.shoulder_rise
 
 
 def gas_spring_home(p2: ShoulderParams, origin: Tuple[float, float, float]) -> cq.Workplane:
-    """수평 자세 가스 스프링: 베이스 앵커 (0, −h) → 상완 앵커 (r, 0), 팔 좌표 origin(J2 축) 기준."""
-    L = gas_spring_balance(p2)["L_horizontal"]
-    elev = math.degrees(math.atan2(p2.gs_h, p2.gs_r))
+    """수평 자세 가스 스프링: 베이스 앵커 → 상완 앵커, 팔 좌표 origin(J2 축) 기준."""
+    (bx, bz), (ax, az) = p2.gs_base, gas_spring_arm_anchor(p2, 0.0)
+    L = math.hypot(ax - bx, az - bz)
+    elev = math.degrees(math.atan2(az - bz, ax - bx))
     # +Y 축 회전은 +X 를 −Z 로 보내므로 들어 올리려면 음의 각
     ox, oy, oz = origin
-    return (make_gas_spring(L).rotate((0, 0, 0), (0, 1, 0), -elev)
-            .translate((ox, oy + gas_spring_y(p2), oz - p2.gs_h)))
+    return (make_gas_spring(L, p2.gs_spec).rotate((0, 0, 0), (0, 1, 0), -elev)
+            .translate((ox + bx, oy + gas_spring_y(p2), oz + bz)))
 
 
 def build_full_robot(theta_left: float = 0.0) -> Tuple[cq.Assembly, Dict[str, float]]:

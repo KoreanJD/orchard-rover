@@ -1,9 +1,9 @@
 === 운반 자세 간섭 검토 (최소 거리 mm, 합격 ≥ 15) ===
 자세               J1   J2    J3   J5 |    min  최악 쌍                       |   Xmax   Zmax    Y반폭  판정
-T1_fold_fwd       0   80  -120   60 |   92.3  arm[3]↔arm[1]                |    841   1526    142  OK
-T2_fold_tight     0   90  -120   30 |   92.3  arm[3]↔arm[1]                |    793   1534    142  OK
+T1_fold_fwd       0   80  -120   60 |   72.1  arm[1]↔J1:gs_clevis          |    841   1526    142  OK
+T2_fold_tight     0   90  -120   30 |   72.1  arm[1]↔J1:gs_clevis          |    793   1534    142  OK
 T3_fold_back    180   60  -120   60 |   92.3  arm[3]↔arm[1]                |    382   1467    142  OK
-T4_low_fwd        0   45  -120   75 |   92.3  arm[3]↔arm[1]                |    891   1387    142  OK
+T4_low_fwd        0   45  -120   75 |   72.1  arm[1]↔J1:gs_clevis          |    891   1387    142  OK
 T5_side          90   80  -120   40 |   92.3  arm[3]↔arm[1]                |    384   1526    538  OK
 
 [T1_fold_fwd] 15 mm 미만 쌍:

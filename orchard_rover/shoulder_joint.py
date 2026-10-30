@@ -78,6 +78,27 @@ class CycloidParams:
                          "위상과 홀 정렬을 동시에 만족할 수 없음")
 
 
+@dataclass(frozen=True)
+class GasSpringSpec:
+    """가스 스프링 카탈로그 사양 (아이 중심 간 길이)."""
+
+    name: str
+    stroke: float
+    force: float            # 반력 N (20 ℃, 최대 길이 − 10 mm 일 때)
+    l_min: float
+    l_max: float
+    d_cyl: float
+    d_rod: float
+    progression: float = 0.3    # 최소 길이에서 반력 증가율 (카탈로그 미기재 → 일반값 가정)
+
+    def force_at(self, length: float) -> float:
+        return self.force * (1 + self.progression * (self.l_max - 10 - length) / self.stroke)
+
+
+# MISUMI 가스스프링 장착방향자유형 (kr.misumi-ec.com, 2026-10-30 확인)
+FGSS22120C = GasSpringSpec("FGSS22120C", stroke=120, force=392, l_min=320, l_max=440, d_cyl=22, d_rod=10)
+
+
 @dataclass
 class ShoulderParams:
     """조인트 전체 치수 및 하중."""
@@ -94,14 +115,17 @@ class ShoulderParams:
     name: str = "J2_shoulder"
     has_gas_spring: bool = True
     motor_holding: float = 4.0      # N·m
-    # 하중
-    torque_static: float = 72.8     # N·m (수평 전개)
-    # 가스 스프링 기하 (피벗 기준): 베이스 앵커 높이 h, 상완 앵커 거리 r
-    gs_h: float = 180.0
-    gs_r: float = 100.0
-    gs_force: float = 350.0         # N (MISUMI 가스 스프링 350 N 급)
-    arm_angle_min: float = -20.0    # deg, 수평 기준
-    arm_angle_max: float = 80.0
+    # 하중 (arm_check.joint_static_torques: 수평 완전 전개 + 툴 3 kg / 전완 접힘·툴 없음)
+    torque_static: float = 79.7     # N·m (수평 전개)
+    torque_static_min: float = 23.2
+    # 가스 스프링 (팔 좌표계 XZ, J2 축 원점, 팔 수평): 베이스 앵커 (x, z) 는 J1 터릿 클레비스,
+    # 상완 앵커는 측판 바깥면 스터드 — 팔 방향에서 δ 만큼 위, 반경 r
+    gs_spec: GasSpringSpec = FGSS22120C
+    gs_base: Tuple[float, float] = (-35.0, -150.0)
+    gs_arm_r: float = 280.0
+    gs_arm_deg: float = 10.0
+    arm_angle_min: float = -20.0    # deg, 수평 기준 (J2 가동 범위)
+    arm_angle_max: float = 90.0
 
 
 # ---------------------------------------------------------------------------
@@ -227,16 +251,17 @@ def make_nema23(p: ShoulderParams) -> cq.Workplane:
     return body.union(boss).union(shaft).union(brake)
 
 
-def make_gas_spring(length: float, neck: float = 22.0) -> cq.Workplane:
-    """가스 스프링 더미 (실린더 Ø22 + 로드 Ø10), X축 방향, 원점=실린더 끝 아이.
+def make_gas_spring(length: float, spec: GasSpringSpec = FGSS22120C, neck: float = 22.0) -> cq.Workplane:
+    """가스 스프링 더미 (실린더 Ø d_cyl + 로드 Ø d_rod), X축 방향, 원점=실린더 끝 아이.
 
     아이: Ø16 × 폭 12, M8 핀 구멍 Ø8.2 (Y 축). 실린더는 아이에서 neck 만큼 떨어져 시작
-    (클레비스 치크와 겹치지 않도록), 실린더 쪽 넥과 로드는 Ø10.
+    (클레비스 치크와 겹치지 않도록). 실린더 끝 = 최소 길이 − 30 (최소 길이에서도 로드 노출 24).
     """
-    cyl_len = length * 0.55
-    neck_rod = cq.Workplane("YZ").circle(5).extrude(neck - 6).translate((6, 0, 0))
-    cyl = cq.Workplane("YZ").circle(11).extrude(cyl_len - neck).translate((neck, 0, 0))
-    rod = cq.Workplane("YZ").circle(5).extrude(length - 6 - cyl_len).translate((cyl_len, 0, 0))
+    cyl_len = spec.l_min - 30
+    neck_rod = cq.Workplane("YZ").circle(spec.d_rod / 2).extrude(neck - 6).translate((6, 0, 0))
+    cyl = cq.Workplane("YZ").circle(spec.d_cyl / 2).extrude(cyl_len - neck).translate((neck, 0, 0))
+    rod = (cq.Workplane("YZ").circle(spec.d_rod / 2).extrude(length - 6 - cyl_len)
+           .translate((cyl_len, 0, 0)))
     eyes = None
     for x in (0.0, length):
         eye = (cq.Workplane("XZ").circle(8).circle(4.1).extrude(6, both=True)
@@ -248,32 +273,49 @@ def make_gas_spring(length: float, neck: float = 22.0) -> cq.Workplane:
 # ---------------------------------------------------------------------------
 # 가스 스프링 밸런서 계산
 # ---------------------------------------------------------------------------
-def gas_spring_balance(p: ShoulderParams) -> Dict[str, float]:
-    """압축 가스 스프링: 베이스 앵커 J2 축 아래 (0, −h), 상완 앵커 팔 중심선 위 r 거리.
+def gas_spring_arm_anchor(p: ShoulderParams, phi_deg: float = 0.0) -> Tuple[float, float]:
+    """팔 각도 φ 에서 상완 앵커 (x, z) — 팔 좌표계, J2 축 원점."""
+    a = math.radians(phi_deg + p.gs_arm_deg)
+    return p.gs_arm_r * math.cos(a), p.gs_arm_r * math.sin(a)
 
-    팔 각도 φ(수평=0). 앵커가 축 아래여야 압축 스프링이 팔을 들어 올린다
-    (축 위에 두면 같은 스프링이 팔을 누르고 길이가 83 mm 까지 줄어 성립하지 않음).
-    스프링 길이 L(φ) = sqrt(r² + h² + 2 r h sinφ)
-    밸런스 토크 T(φ) = F · r · h · cosφ / L(φ)   (중력 토크 ∝ cosφ 와 같은 형상)
+
+def gas_spring_state(p: ShoulderParams, phi_deg: float) -> Tuple[float, float, float]:
+    """(스프링 길이 mm, 반력 N, 팔을 들어 올리는 토크 N·m) — 압축 스프링이 앵커를 밀어냄."""
+    ax, az = gas_spring_arm_anchor(p, phi_deg)
+    bx, bz = p.gs_base
+    vx, vz = ax - bx, az - bz
+    L = math.hypot(vx, vz)
+    F = p.gs_spec.force_at(L)
+    return L, F, (ax * vz - az * vx) / L * F / 1000.0
+
+
+def gas_spring_balance(p: ShoulderParams, step: float = 1.0) -> Dict[str, float]:
+    """J2 가동 범위 전체에서 스프링 길이·토크와 J2 액추에이터 부담.
+
+    부담 = max(|중력(전개+툴) − 스프링|, |중력(접힘·툴 없음) − 스프링|) × 동적 1.5
+    (가스 스프링 반력은 거의 일정이라 cosφ 형 중력을 정확히 따라가지 못함 → 각도별로 확인)
     """
-    r, h, F = p.gs_r, p.gs_h, p.gs_force
-
-    def length(phi_deg: float) -> float:
-        return math.sqrt(r * r + h * h + 2 * r * h * math.sin(math.radians(phi_deg)))
-
-    def torque(phi_deg: float) -> float:
-        return F * r * h * math.cos(math.radians(phi_deg)) / length(phi_deg) / 1000.0
-
-    l_min, l_max = length(p.arm_angle_min), length(p.arm_angle_max)
-    t0 = torque(0.0)
+    n = int(round((p.arm_angle_max - p.arm_angle_min) / step))
+    lengths, worst, worst_phi = [], 0.0, 0.0
+    for k in range(n + 1):
+        phi = p.arm_angle_min + k * step
+        L, _, tau = gas_spring_state(p, phi)
+        g = math.cos(math.radians(phi))
+        demand = 1.5 * max(abs(p.torque_static * g - tau), abs(p.torque_static_min * g - tau))
+        lengths.append(L)
+        if demand > worst:
+            worst, worst_phi = demand, phi
+    L0, F0, t0 = gas_spring_state(p, 0.0)
+    s = p.gs_spec
     return {
-        "L_horizontal": length(0.0),
-        "L_min": l_min, "L_max": l_max, "stroke": l_max - l_min,
+        "L_horizontal": L0,
+        "L_min": min(lengths), "L_max": max(lengths), "stroke": max(lengths) - min(lengths),
+        "margin_compressed": min(lengths) - s.l_min, "margin_extended": s.l_max - max(lengths),
+        "force_horizontal": F0,
         "balance_torque_horizontal": t0,
         "gravity_torque_horizontal": p.torque_static,
-        "residual_horizontal": p.torque_static - t0,
         "balance_ratio": t0 / p.torque_static,
-        "residual_at_45deg": p.torque_static * math.cos(math.radians(45)) - torque(45.0),
+        "worst_actuator_demand": worst, "worst_demand_angle": worst_phi,
     }
 
 
@@ -316,13 +358,13 @@ def build(p: ShoulderParams) -> Tuple[cq.Assembly, Dict[str, cq.Workplane]]:
     arm_plate = (cq.Workplane("XY").center(100, 0).slot2D(260, 70, 0).extrude(p.arm_plate_t)
                  .translate((0, 0, z_fl + wb + 10)))
     asm.add(arm_plate, name="upper_arm_plate", color=cq.Color(0.85, 0.3, 0.3))
-    # 가스 스프링: 베이스 앵커 (0, −h) → 상완 앵커 (r, 0), 수평 자세
+    # 가스 스프링: 베이스 앵커 → 상완 앵커, 수평 자세 (조인트 프레임에서 팔 피치 평면 = XY)
     if p.has_gas_spring:
-        gs = gas_spring_balance(p)
-        L = gs["L_horizontal"]
-        ang = math.degrees(math.atan2(p.gs_h, p.gs_r))
-        spring = (make_gas_spring(L).rotate((0, 0, 0), (0, 0, 1), ang)
-                  .translate((0, -p.gs_h, z_fl + wb + 10 + p.arm_plate_t + 15)))
+        (bx, bz), (ax, az) = p.gs_base, gas_spring_arm_anchor(p, 0.0)
+        L = math.hypot(ax - bx, az - bz)
+        ang = math.degrees(math.atan2(az - bz, ax - bx))
+        spring = (make_gas_spring(L, p.gs_spec).rotate((0, 0, 0), (0, 0, 1), ang)
+                  .translate((bx, bz, z_fl + wb + 10 + p.arm_plate_t + 15)))
         asm.add(spring, name="gas_spring", color=cq.Color(0.2, 0.7, 0.3))
     return asm, parts
 
@@ -380,7 +422,9 @@ def export(p: ShoulderParams, out: Path) -> str:
              f"  하우징 OD {2 * (c.r_pin_circle + c.r_pin + c.housing_t):.0f}, 출력 베어링 {p.output_bearing}",
              f"  모터 NEMA23 {p.motor_holding} N·m, 실사용 출력 {p.motor_holding * 0.5 * c.ratio * 0.8:.0f} N·m, 축방향 길이 {joint_stack_length(p) + p.motor_len + p.brake_len:.0f}"]
     if p.has_gas_spring:
-        lines += ["", "[가스 스프링 밸런서]  F=%.0f N, h=%.0f, r=%.0f" % (p.gs_force, p.gs_h, p.gs_r)]
+        s = p.gs_spec
+        lines += ["", f"[가스 스프링 밸런서]  {s.name} (스트로크 {s.stroke:.0f}, {s.l_min:.0f}~{s.l_max:.0f}, "
+                      f"{s.force:.0f} N), 베이스 앵커 {p.gs_base}, 상완 앵커 r {p.gs_arm_r:.0f} / δ {p.gs_arm_deg:+.0f}°"]
         lines += [f"  {k:28s}: {v:8.1f}" for k, v in gs.items()]
     txt = "\n".join(lines)
     (out / "design_summary.txt").write_text(txt, encoding="utf-8")
