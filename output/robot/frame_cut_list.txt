@@ -1,0 +1,11 @@
+=== 구동체 프레임 절단 목록 — MISUMI HFS5-4040 (5시리즈 40×40, 홈 2열×4면, A6N01SS-T5) ===
+형번                         수량  부재
+HFS5-4040-1000             4  rail_low_L, rail_low_R, rail_top_L, rail_top_R
+HFS5-4040-720              7  cross_low_F, cross_low_B, cross_top_F, cross_top_B, cross_diff, crossmember_r, crossmember_f
+HFS5-4040-350              4  post_FL, post_FR, post_BL, post_BR
+
+부재 15 본, 총 길이 10.44 m, 질량 13.4 kg
+맞대기 체결 22 곳: 맞대기 끝단 M5 탭 (코너 구멍 Ø4.2, 대각 2곳), 관통 부재에 렌치 홀 2 → M5 캡 스크류
+  (MISUMI 추가 가공 옵션: 끝단 M 탭 + 렌치 홀 — 위치는 상대 부재 중심선, 주문 시 옵션 코드로 지정)
+  브라켓 미사용: 레일 상면·측면은 베이스 플레이트·피벗 홀더·차동 포스트 체결면
+T너트: HNTT5-5 (M5) — 시리즈 5 홈은 M3~M5 까지

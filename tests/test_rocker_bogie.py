@@ -249,3 +249,37 @@ def test_base_plate_bolts_on_slots(params: SuspensionParams) -> None:
             assert abs(abs(y) - rail_c) == pytest.approx(s)
         else:
             assert abs(abs(x) - b.crossmember_dx) == pytest.approx(s)
+
+
+# ---------------------------------------------------------------------------
+# 프레임: HFS5-4040 부재 (맞대기 + 끝단 탭)
+# ---------------------------------------------------------------------------
+def test_frame_members_are_profiles_without_overlap(params: SuspensionParams) -> None:
+    """부재별 단일 솔리드, 카탈로그 길이 범위, 서로 겹치지 않고 맞대기 부재는 관통 부재에 닿음."""
+    from itertools import combinations
+
+    from orchard_rover.rocker_bogie_cad import frame_members, make_frame
+
+    members = {f"frame_{m.name}": m for m in frame_members(params)}
+    shapes = {n: o.val() for n, o in make_frame(params).items()}
+    assert len(shapes) == 13
+    for n, s in shapes.items():
+        assert s.isValid() and len(s.Solids()) == 1, n
+        assert 50 <= members[n].length <= 4000
+    for a, b in combinations(shapes, 2):
+        assert shapes[a].intersect(shapes[b]).Volume() < 0.01, (a, b)
+    for n, m in members.items():
+        if m.butt_ends:
+            touching = [o for o in shapes if o != n and shapes[n].distance(shapes[o]) < 1e-6]
+            assert len(touching) >= 2, n
+
+
+def test_frame_slots_under_pivot_holder_bolts(params: SuspensionParams) -> None:
+    """하단 레일 바깥 측면에서 SHF20 볼트 위치(Z 300)가 홈 개구(폭 6) 안."""
+    from orchard_rover.rocker_bogie_cad import make_frame
+
+    rail = make_frame(params)["frame_rail_low_L"].val()
+    for x in (-params.shf_hole_pitch / 2, params.shf_hole_pitch / 2):
+        probe = cq.Workplane("XZ").center(x, params.z_rocker_pivot).circle(2.5).extrude(-3).translate(
+            (0, params.frame_half_w - 1.5, 0)).val()                # 바깥 면 안쪽 1.5 (홈 립 깊이 이내)
+        assert rail.intersect(probe).Volume() < 1e-6
