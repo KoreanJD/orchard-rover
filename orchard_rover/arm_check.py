@@ -129,7 +129,7 @@ def plate_strength() -> Dict[str, Dict[str, float]]:
     """
     from orchard_rover.arm_assembly import PLATE_T, UPPER_LEN, upper_plate_y
     from orchard_rover.base_joint import BaseJointParams
-    from orchard_rover.shoulder_joint import ADAPTER_T, ShoulderParams, gas_spring_balance
+    from orchard_rover.shoulder_joint import ADAPTER_T, ShoulderParams, gas_spring_arm_anchor, gas_spring_state
     from orchard_rover.wrist_joint import NEMA17, WristParams
 
     out: Dict[str, Dict[str, float]] = {}
@@ -137,8 +137,9 @@ def plate_strength() -> Dict[str, Dict[str, float]]:
 
     # --- J1 브라켓 ---
     weight = weight_beyond(-1.0)
-    L = gas_spring_balance(p2)["L_horizontal"]
-    f_spring = (p2.gs_force * p2.gs_r / L, p2.gs_force * p2.gs_h / L)     # 상완 앵커에 작용 (x, z)
+    (bx, bz), (ax, az) = p2.gs_base, gas_spring_arm_anchor(p2, 0.0)
+    L, f0, _ = gas_spring_state(p2, 0.0)
+    f_spring = (f0 * (ax - bx) / L, f0 * (az - bz) / L)                    # 상완 앵커에 작용 (x, z)
     cases = [(f_spring[0], f_spring[1] - weight), (0.0, -weight)]          # 스프링 작동 / 상실
     fx, fz = max(cases, key=lambda f: math.hypot(*f))
     fx, fz = DYN * abs(fx), DYN * abs(fz)

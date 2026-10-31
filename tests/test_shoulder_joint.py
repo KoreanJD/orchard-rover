@@ -43,18 +43,25 @@ def test_output_pins_inside_disc_and_clear_of_cam(p: ShoulderParams) -> None:
     assert c.r_out_pcd - c.d_out_hole / 2 > c.d_cam_bearing / 2 + 4
 
 
-def test_gas_spring_balance(p: ShoulderParams) -> None:
-    """수평에서 중력 토크의 35~50% 보상, 스트로크 ≤ 120 (상용 가스 스프링 범위)."""
+def test_gas_spring_within_catalog_length(p: ShoulderParams) -> None:
+    """J2 −20~90° 전 구간에서 스프링 길이가 카탈로그 최소·최대 길이 안 (양끝 ≥ 5 mm 여유)."""
     g = gas_spring_balance(p)
-    assert 0.35 <= g["balance_ratio"] <= 0.5
-    assert g["stroke"] <= 120.0
-    assert g["L_min"] > 150.0           # 압축 상태 최소 길이 (실린더+로드)
+    assert g["margin_compressed"] >= 5.0
+    assert g["margin_extended"] >= 5.0
 
 
-def test_residual_torque_within_actuator(p: ShoulderParams) -> None:
-    """잔류 토크 ×1.5 ≤ NEMA23 4.0 N·m ×50% ×50 ×0.8 = 80 N·m."""
+def test_actuator_demand_over_full_range(p: ShoulderParams) -> None:
+    """전 각도에서 J2 부담 ×1.5 ≤ NEMA23 4.0 N·m ×50% ×50 ×0.8 = 80 N·m (전개+툴 / 접힘·툴 없음)."""
     g = gas_spring_balance(p)
-    assert g["residual_horizontal"] * 1.5 <= 80.0
+    assert g["worst_actuator_demand"] <= p.motor_holding * 0.5 * p.cyc.ratio * 0.8
+    assert g["balance_torque_horizontal"] > 0               # 팔을 들어 올리는 방향
+
+
+def test_gravity_torque_matches_arm_check(p: ShoulderParams) -> None:
+    """밸런스 계산의 중력 토크 = arm_check 정적 토크 (수평 전개, 툴 3 kg)."""
+    from orchard_rover.arm_check import joint_static_torques
+
+    assert p.torque_static == pytest.approx(joint_static_torques()["J2_shoulder"], abs=0.1)
 
 
 cq = pytest.importorskip("cadquery")

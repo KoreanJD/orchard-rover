@@ -1,6 +1,6 @@
 === 판재 부품 DXF (두께 중앙 단면) ===
 부품                             두께         외곽 W×H   구멍  재질
-upper_plate_J2               12.0    280×140      13  Al 6061-T6 12t
+upper_plate_J2               12.0    355×140      15  Al 6061-T6 12t
 upper_plate_J3               12.0    280×140      13  Al 6061-T6 12t
 fore_plate_J3                10.0    184×151       5  Al 6061-T6 10t (J3 어댑터 겸용)
 fore_offset_bracket          12.0     56×90        0  Al 6061-T6 12t

@@ -20,7 +20,7 @@ from orchard_rover.arm_pose_render import pose_arm, STAGE_NAME
 from orchard_rover.base_joint import BaseJointParams, build_j1
 from orchard_rover.rocker_bogie_cad import build_assembly as build_rover
 from orchard_rover.rocker_bogie_params import SuspensionParams
-from orchard_rover.shoulder_joint import ShoulderParams
+from orchard_rover.shoulder_joint import ShoulderParams, gas_spring_arm_anchor
 
 J2_ORIGIN = (300.0, 0.0, 958.0)
 MIN_CLEAR = 15.0
@@ -49,17 +49,19 @@ def static_shapes() -> Dict[str, cq.Shape]:
 
 
 def gas_spring_posed(q: Dict[str, float]) -> cq.Shape:
-    """가스 스프링: 베이스 앵커 (J2 축 아래 h, 터릿 클레비스) → 상완 앵커 (팔 중심선 r, J2 와 함께 회전).
+    """가스 스프링: 베이스 앵커 (터릿 클레비스, 팔 좌표 gs_base) → 상완 앵커 (J2 와 함께 회전).
 
-    상완 측판 바깥 평면, Ø22 실린더. J1 요에 따라 터릿과 함께 회전.
+    상완 측판 바깥 평면, 실린더 Ø d_cyl. J1 요에 따라 터릿과 함께 회전.
     """
     p2 = ShoulderParams()
     y = gas_spring_y(p2)
-    th = math.radians(q.get("J2", 0.0))
-    a0 = cq.Vector(0, y, -p2.gs_h)
-    a1 = cq.Vector(p2.gs_r * math.cos(th), y, p2.gs_r * math.sin(th))
+    bx, bz = p2.gs_base
+    ax, az = gas_spring_arm_anchor(p2, q.get("J2", 0.0))
+    a0 = cq.Vector(bx, y, bz)
+    a1 = cq.Vector(ax, y, az)
     v = a1 - a0
-    spring = cq.Workplane(cq.Plane(origin=a0, normal=v.normalized())).circle(11).extrude(v.Length).val()
+    spring = (cq.Workplane(cq.Plane(origin=a0, normal=v.normalized())).circle(p2.gs_spec.d_cyl / 2)
+              .extrude(v.Length).val())
     if q.get("J1", 0):
         spring = spring.rotate(cq.Vector(0, 0, 0), cq.Vector(0, 0, 1), q["J1"])
     return spring.translate(cq.Vector(*J2_ORIGIN))

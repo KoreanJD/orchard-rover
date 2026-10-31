@@ -9,7 +9,7 @@
 
 상완: HFS6-3030 ×2 (Z 방향 60 간격 사다리, 양단 링 하우징 회피) + 양단 12t Al 측판, 500 (축간)
 전완: 전완판(10t, J3 어댑터 자리) + J4 하우징 연결 브라켓 + 6축 손목 체인
-가스 스프링: J2 축 아래 앵커(J1 터릿 클레비스) → 상완 측판 바깥면 스터드, 측판 바깥 평면
+가스 스프링 MISUMI FGSS22120C: J1 터릿 클레비스 (J2 축 −35, −150) → 상완 측판 바깥면 스터드 (r280, +10°)
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from typing import Dict
 import cadquery as cq
 
 from orchard_rover.shoulder_joint import (ADAPTER_T, ShoulderParams, adapter_radius, build, elbow_params,
-                                          joint_stack_length)
+                                          gas_spring_arm_anchor, joint_stack_length)
 from orchard_rover.wrist_joint import NEMA17, WristParams, build_wrist
 
 UPPER_LEN = 500.0
@@ -30,6 +30,7 @@ RAIL = 30.0
 RAIL_GAP = 60.0          # 두 레일 면 사이 간격 (Z)
 RAIL_END = 85.0          # 관절 축 → 레일 끝 (J2 링 하우징 r82.5 + 여유)
 PLATE_T = 12.0
+J2_PLATE_END = 285.0    # J2 측판 끝 X (가스 스프링 스터드 r280 수용, J3 측판 X 290)
 GS_PLANE_GAP = 14.0      # 상완 측판 바깥면 → 가스 스프링 중심 평면 (간극 3 + 실린더 r11)
 COL = {
     "rail": cq.Color(0.6, 0.6, 0.63), "plate": cq.Color(0.85, 0.3, 0.3),
@@ -97,15 +98,17 @@ def make_upper_arm(p2: ShoulderParams, p3: ShoulderParams, y_plate: float) -> Di
         rail = (cq.Workplane("XY").box(rail_len, RAIL, RAIL)
                 .translate((UPPER_LEN / 2, y_plate + PLATE_T + RAIL / 2, z)))
         shapes[f"upper_rail_{i}"] = (rail, COL["rail"])
-    # J2 측판: 플랜지 체결 (PCD 90) + 레일 T-슬롯 체결 홀
+    # J2 측판: 플랜지 체결 (PCD 90) + 레일 T-슬롯 체결 홀, 가스 스프링 스터드 자리까지 X 285 로 연장
+    # (J3 측판 시작 X 290 과 5 간격)
     plate_h = RAIL_GAP + 2 * RAIL + 20
-    p_j2 = (cq.Workplane("XZ").center(90, 0).rect(240, plate_h).extrude(-PLATE_T)
+    x0, x1 = -30.0, J2_PLATE_END
+    p_j2 = (cq.Workplane("XZ").center((x0 + x1) / 2, 0).rect(x1 - x0, plate_h).extrude(-PLATE_T)
             .edges("|Y").fillet(10))
     p_j2 = p_j2.union(cq.Workplane("XZ").circle(plate_h / 2).extrude(-PLATE_T))
     p_j2 = _cut_y(p_j2, [(0, 0)], p2.output_bearing[0] - 10)
     p_j2 = _cut_y(p_j2, _bolt6(0.0, p2.flange_bolt_pcd), 6.6)
     rail_bolts = [(x, z) for x in (100, 150, 190) for z in (z_rail, -z_rail)]
-    p_j2 = _cut_y(p_j2, rail_bolts, 6.6)
+    p_j2 = _cut_y(p_j2, rail_bolts + [(240.0, z_rail), (240.0, -z_rail)], 6.6)
     # XZ 압출(-PLATE_T)은 +Y 방향 → Y ∈ [y_plate, y_plate + PLATE_T]
     shapes["upper_plate_J2"] = (p_j2.translate((0, y_plate, 0)), COL["plate"])
     # J3 측판: J3 출력 플랜지 체결 (J2 측판과 같은 방식) + 레일 체결
@@ -116,11 +119,12 @@ def make_upper_arm(p2: ShoulderParams, p3: ShoulderParams, y_plate: float) -> Di
     p_j3 = _cut_y(p_j3, _bolt6(UPPER_LEN, p3.flange_bolt_pcd), 6.6)
     p_j3 = _cut_y(p_j3, [(UPPER_LEN - x, z) for x, z in rail_bolts], 6.6)
     shapes["upper_plate_J3"] = (p_j3.translate((0, y_plate, 0)), COL["plate"])
-    # 가스 스프링 상완 앵커: 측판 바깥면 스터드 (J2 축에서 팔 중심선 r), 스페이서 + M8 핀
+    # 가스 스프링 상완 앵커: 측판 바깥면 M8 스터드 (측판 탭, 스페이서 + 핀) — 팔 수평일 때 위치
+    ax, az = gas_spring_arm_anchor(p2, 0.0)
     y_eye = y_plate - GS_PLANE_GAP
-    spacer = (cq.Workplane("XZ").center(p2.gs_r, 0).circle(8).extrude(y_plate - (y_eye + 6))
+    spacer = (cq.Workplane("XZ").center(ax, az).circle(8).extrude(y_plate - (y_eye + 6))
               .translate((0, y_plate, 0)))                      # XZ 압출(+) = −Y 방향
-    pin = (cq.Workplane("XZ").center(p2.gs_r, 0).circle(4).extrude(14)
+    pin = (cq.Workplane("XZ").center(ax, az).circle(4).extrude(14)
            .translate((0, y_eye + 6, 0)))
     shapes["gs_anchor_arm"] = (spacer.union(pin), COL["bracket"])
     return shapes
