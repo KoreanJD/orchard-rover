@@ -47,10 +47,11 @@ WHEELS: Dict[int, Dict[str, float]] = {
     150: {"width": 40.0, "bore": 16.0, "load": 900.0, "type": "UWRF150"},
     # 공압 타이어 / 허브 모터 (범용 규격) — 과수원 요철·뿌리 대응
     #   250: 10인치 3.00-4 타이어 — 전방: BLDC 허브모터(36V 350W, M12 축),
-    #        중간/후방: 동일 타이어 아이들러(6003ZZ 베어링 허브)
+    #        중간/후방: 동일 타이어 아이들러 — 허브 베어링 내경 20 (모델 6004ZZ ×2, 시판 3.00-4 휠은
+    #        6204 계열 내경 20 이 흔함: 구매 시 내경 20 선택), SFJ20 축 + SHF20 홀더 + PSCS20-12 칼라
     #   330: 13인치 4.10/3.50-6 — 더 큰 장애물, 프레임 높이 상향 필요
-    250: {"width": 80.0, "bore": 16.0, "load": 1500.0, "type": "10in 3.00-4 / hub motor"},
-    330: {"width": 90.0, "bore": 16.0, "load": 2000.0, "type": "13in 4.10/3.50-6"},
+    250: {"width": 80.0, "bore": 20.0, "load": 1500.0, "type": "10in 3.00-4 / hub motor"},
+    330: {"width": 90.0, "bore": 20.0, "load": 2000.0, "type": "13in 4.10/3.50-6"},
 }
 
 
@@ -75,7 +76,7 @@ class SuspensionParams:
         rocker_shaft_d: 로커 피벗 축경 (SHF20 클램프·PSCS20 칼라 구간).
         rocker_journal_d: 로커 피벗 축 베어링 저널경 (6004ZZ 내경, 축경과 같음).
         bogie_shaft_d: 보기 피벗 축경.
-        axle_d: 휠 스터브 액슬 축경.
+        axle_d: 아이들러 스터브 액슬 축경 (SFJ20, 보기 판 바깥면 SHF20 홀더로 클램프).
     """
 
     # ---- 하중 조건 ----
@@ -122,7 +123,10 @@ class SuspensionParams:
     collar_w: float = 12.0
     block_gap: float = 2.0        # 서포트-로커 플레이트 간 스러스트 와셔 간극
     plate_gap: float = 6.0        # 로커-보기 플레이트 간 와셔 간격
-    wheel_gap: float = 16.0       # 보기 플레이트-휠 내측면 간격 (로커 축 끝·PSCS20 칼라보다 휠이 Y 바깥)
+    # 보기 플레이트-휠 내측면 간격 = 아이들러 축 SHF20 홀더 돌출 T20 + 내륜 스페이서 4
+    # (로커 축 끝·PSCS20 칼라보다 휠이 Y 바깥)
+    wheel_gap: float = 24.0
+    idler_washer_t: float = 2.0   # 아이들러 휠 외측 와셔 (Ø20/Ø28, 칼라가 베어링 외륜에 닿지 않게)
     fork_gap: float = 10.0        # 전방 휠 외측면-외측 포크 간격
 
     # ---- 단면 ----
@@ -145,7 +149,7 @@ class SuspensionParams:
     rocker_shaft_d: int = 20      # SHF20·PSCS20 + 6004ZZ, SFJ20 직선축 (SUJ2)
     rocker_journal_d: int = 20
     bogie_shaft_d: int = 12
-    axle_d: int = 16              # 아이들러 스터브 액슬
+    axle_d: int = 20              # 아이들러 스터브 액슬 SFJ20 (SHF20·PSCS20-12 는 로커 피벗과 공용)
     front_axle_d: float = 12.0    # 전방 허브모터 고정축 M12 (플랫 10, 드롭아웃 치수는 모터 사양 확정 후)
     front_axle_flat: float = 10.0
     front_axle_yield: float = 640.0   # 허브모터 축 강종 미확정 → 8.8 급(σy 640) 가정
@@ -357,6 +361,16 @@ class SuspensionParams:
         m_axle = loads["front"] * self.dynamic_factor * a * b / (a + b)
         z_axle = math.pi * self.front_axle_flat ** 3 / 32.0
         sf["front_axle"] = self.front_axle_yield / (m_axle / z_axle)
+
+        # 아이들러 축: 보기 판 바깥면 SHF20 홀더에서 외팔보, 휠 중앙 하중 → 홀더 보스 끝 단면
+        n_idler = max(loads["mid"], loads["rear"]) * self.dynamic_factor
+        y_bogie_out = self.derived["y_bogie_in"] + self.plate_t
+        arm_axle = self.derived["y_wheel_c"] - (y_bogie_out + self.pivot_block_t)
+        z_idler = math.pi * self.axle_d ** 3 / 32.0
+        sf["idler_axle"] = 205.0 / (n_idler * arm_axle / z_idler)
+        # 홀더 볼트: 볼트 줄을 세로(Z ±L1/2)로 돌려 달아 휠 하중 모멘트를 볼트 인장으로 받음 (M6 8.8, As 20.1)
+        m_flange = n_idler * (self.derived["y_wheel_c"] - y_bogie_out)
+        sf["idler_holder_bolt"] = 640.0 / (m_flange / self.shf_hole_pitch / 20.1)
         return sf
 
     # ------------------------------------------------------------------

@@ -129,12 +129,15 @@ def make_bogie_plate(p: SuspensionParams) -> cq.Workplane:
             .extrude(-boss_len))
     plate = plate.union(boss)
     plate = _hole(plate, pts["B"], brg["od"] - 0.01)
-    plate = _hole(plate, pts["M"], p.axle_d + 0.05)
-    plate = _hole(plate, pts["R"], p.axle_d + 0.05)
+    for key in ("M", "R"):
+        x, z = pts[key]
+        plate = _hole(plate, (x, z), p.axle_d + 0.05)              # SFJ20 (SHF20 홀더가 클램프)
+        for dz in (-p.shf_hole_pitch / 2, p.shf_hole_pitch / 2):   # 홀더 볼트 M6 탭 (드릴 Ø5.0, 세로 줄)
+            plate = _hole(plate, (x, z + dz), 5.0)
     return plate
 
 
-def make_pivot_block(p: SuspensionParams) -> cq.Workplane:
+def make_pivot_block(p: SuspensionParams, bore: float = None) -> cq.Workplane:
     """로커 피벗 서포트 — MISUMI SHF20 플랜지형 샤프트 홀더 (주조품, 단순화 형상).
 
     L60 × t8 플랜지 + 보스 (축방향 전체 T20), 볼트 홀 Ø7 ×2 (간격 48, X 방향, 축 중심 높이)
@@ -147,19 +150,34 @@ def make_pivot_block(p: SuspensionParams) -> cq.Workplane:
               .edges("|Y").fillet(8))
     hub = cq.Workplane("XZ").circle(r_hub).extrude(-(t + boss))
     blk = flange.union(hub)
-    blk = blk.cut(cq.Workplane("XZ").circle(p.rocker_shaft_d / 2 + 0.01).extrude(t + boss + 2, both=True))
+    bore = p.rocker_shaft_d if bore is None else bore
+    blk = blk.cut(cq.Workplane("XZ").circle(bore / 2 + 0.01).extrude(t + boss + 2, both=True))
     blk = blk.cut(cq.Workplane("XZ").pushPoints([(-pitch / 2, 0), (pitch / 2, 0)])
                   .circle(p.shf_hole_d / 2).extrude(t + boss + 2, both=True))
     # 클램프 슬릿 (하단, 폭 2) — 축 구멍부터 보스 밖까지
-    slit = (cq.Workplane("XZ").center(0, -(p.rocker_shaft_d / 2 + r_hub) / 2)
-            .rect(2, r_hub - p.rocker_shaft_d / 2 + 2).extrude(-(t + boss)))
+    slit = (cq.Workplane("XZ").center(0, -(bore / 2 + r_hub) / 2)
+            .rect(2, r_hub - bore / 2 + 2).extrude(-(t + boss)))
     return blk.cut(slit)
+
+
+def make_axle_holder(p: SuspensionParams) -> cq.Workplane:
+    """아이들러 축 홀더 — SHF20 을 Y축 기준 90° 돌려 볼트 줄을 세로(Z ±24)로.
+
+    휠 하중 모멘트(X축 둘레)를 볼트 인장으로 받는다. 보기 판 바깥면에 M6 ×2 (판 12t 에 탭).
+    클램프 슬릿은 ±X 쪽 → 판과 휠 사이 틈으로 육각 렌치 접근.
+    """
+    return make_pivot_block(p, p.axle_d).rotate((0, 0, 0), (0, 1, 0), 90)
+
+
+def make_spacer(p: SuspensionParams, length: float) -> cq.Workplane:
+    """아이들러 축 스페이서/와셔 Ø20/Ø28 — 베어링 내륜만 받친다 (+Y 방향 0 → length)."""
+    return cq.Workplane("XZ").circle(14.0).circle(p.axle_d / 2 + 0.01).extrude(-length)
 
 
 def make_shaft_collar(p: SuspensionParams) -> cq.Workplane:
     """세트 칼라 PSCS20-12 (슬릿, Ø20 축 빠짐 방지)."""
     return (cq.Workplane("XZ").circle(p.collar_od / 2).circle(p.rocker_shaft_d / 2 + 0.01)
-            .extrude(-p.collar_w))
+            .extrude(-p.collar_w))   # 아이들러 축(SFJ20)에도 같은 칼라
 
 
 def make_rocker_shaft(p: SuspensionParams) -> cq.Workplane:
@@ -201,10 +219,16 @@ def make_bearing_pair(bore: float, gap: float, plane: str = "XZ") -> cq.Workplan
     return out
 
 
-def make_axle(p: SuspensionParams, overhang: float) -> cq.Workplane:
-    """휠 스터브 액슬 SFJ16 — 플레이트 내측면에서 휠 외측면까지."""
-    length = overhang + WHEELS[p.wheel_d]["width"] / 2 + 8
-    return cq.Workplane("XZ").circle(p.axle_d / 2).extrude(-length)
+def idler_axle_length(p: SuspensionParams) -> float:
+    """SFJ20 아이들러 축 길이: 보기 판 내측면 → 판·홀더·스페이서·휠·와셔·PSCS20 칼라 + 2."""
+    d = p.derived
+    return (d["y_wheel_in"] - d["y_bogie_in"] + WHEELS[p.wheel_d]["width"]
+            + p.idler_washer_t + p.collar_w + 2)
+
+
+def make_axle(p: SuspensionParams) -> cq.Workplane:
+    """아이들러 스터브 액슬 SFJ20 — 보기 판 내측면에서 칼라 바깥까지 (+Y)."""
+    return cq.Workplane("XZ").circle(p.axle_d / 2).extrude(-idler_axle_length(p))
 
 
 def make_front_axle(p: SuspensionParams) -> cq.Workplane:
@@ -242,24 +266,36 @@ def make_standoff(p: SuspensionParams) -> cq.Workplane:
     return (cq.Workplane("XZ").circle(p.standoff_d / 2).circle(5.1).extrude(-length))
 
 
-def make_wheel(p: SuspensionParams) -> cq.Workplane:
-    """UWRF 우레탄 휠 (단순화: 원통 + 허브 + 보어)."""
-    spec = WHEELS[p.wheel_d]
-    r, wdt = p.wheel_d / 2, spec["width"]
+def _tire(p: SuspensionParams) -> cq.Workplane:
+    """타이어 + 허브 (단순화: 원통 + 측면 리세스, 보어 없음) — +Y 방향 0 → 폭."""
+    r, wdt = p.wheel_d / 2, WHEELS[p.wheel_d]["width"]
     wheel = (cq.Workplane("XZ").circle(r).extrude(-wdt)
              .faces(">Y").workplane().circle(r - 12).cutBlind(-5)
              .faces("<Y").workplane().circle(r - 12).cutBlind(-5))
-    hub = cq.Workplane("XZ").circle(r - 25).extrude(-wdt)
-    wheel = wheel.union(hub)
-    bore = cq.Workplane("XZ").circle(spec["bore"] / 2 + 0.05).extrude(wdt + 2, both=True)
-    return wheel.cut(bore)
+    return wheel.union(cq.Workplane("XZ").circle(r - 25).extrude(-wdt))
+
+
+def make_wheel(p: SuspensionParams) -> cq.Workplane:
+    """아이들러 휠 — 허브 양끝 베어링 포켓 (내경 20 베어링 ×2, 외경 압입), 가운데 축 관통."""
+    wdt = WHEELS[p.wheel_d]["width"]
+    brg = BEARINGS[p.axle_d]
+    wheel = _tire(p).cut(cq.Workplane("XZ").circle(p.axle_d / 2 + 1.0).extrude(wdt + 2, both=True))
+    for y0 in (0.0, wdt - brg["width"]):
+        pocket = cq.Workplane("XZ").circle((brg["od"] - 0.01) / 2).extrude(-brg["width"]).translate((0, y0, 0))
+        wheel = wheel.cut(pocket)
+    return wheel
+
+
+def idler_bearing_gap(p: SuspensionParams) -> float:
+    """아이들러 허브 베어링 2개 사이 간격 (허브 양끝에 하나씩)."""
+    return WHEELS[p.wheel_d]["width"] - 2 * BEARINGS[p.axle_d]["width"]
 
 
 def make_hub_motor_wheel(p: SuspensionParams) -> cq.Workplane:
     """전방 구동륜 — 10인치 타이어 + BLDC 허브 모터(스테이터 Ø160×60, 단순화)."""
     spec = WHEELS[p.wheel_d]
     wdt = spec["width"]
-    wheel = make_wheel(p)
+    wheel = _tire(p)
     motor = (cq.Workplane("XZ").circle(80).extrude(-60).translate((0, (wdt - 60) / 2, 0))
              .faces(">Y").workplane().circle(70).cutBlind(-3))
     # 스테이터 보어 = 고정축 M12 (+0.1)
@@ -437,11 +473,21 @@ def _side(p: SuspensionParams, side: float, theta: float,
         # 보기 보스 6001ZZ ×2 (간격 4) — 보기 축 위
         "bogie_bearing": (parts["bogie_bearing"].translate((bx, d["y_bogie_in"], bz)), COLORS["pivot"]),
     }
+    y_bogie_out = d["y_bogie_in"] + p.plate_t
+    y_wheel_out = d["y_wheel_in"] + wdt
     for key in ("M", "R"):
-        bogie_grp[f"axle_{key}"] = (
-            parts["axle_mb"].translate((pts[key][0], d["y_bogie_in"], pts[key][1])), COLORS["pivot"])
-        bogie_grp[f"wheel_{key}"] = (
-            parts["wheel"].translate((pts[key][0], d["y_wheel_in"], pts[key][1])), COLORS["wheel"])
+        x, z = pts[key]
+        # SFJ20 축 | SHF20 홀더(판 바깥면) | 스페이서 | 휠(베어링 ×2) | 와셔 | PSCS20-12 칼라
+        bogie_grp[f"axle_{key}"] = (parts["axle_mb"].translate((x, d["y_bogie_in"], z)), COLORS["pivot"])
+        bogie_grp[f"axle_holder_{key}"] = (parts["axle_holder"].translate((x, y_bogie_out, z)), COLORS["frame"])
+        bogie_grp[f"idler_spacer_{key}"] = (
+            parts["idler_spacer"].translate((x, y_bogie_out + p.pivot_block_t, z)), COLORS["pivot"])
+        bogie_grp[f"wheel_{key}"] = (parts["wheel"].translate((x, d["y_wheel_in"], z)), COLORS["wheel"])
+        bogie_grp[f"wheel_bearing_{key}"] = (
+            parts["idler_bearing"].translate((x, d["y_wheel_in"], z)), COLORS["pivot"])
+        bogie_grp[f"idler_washer_{key}"] = (parts["idler_washer"].translate((x, y_wheel_out, z)), COLORS["pivot"])
+        bogie_grp[f"idler_collar_{key}"] = (
+            parts["shaft_collar"].translate((x, y_wheel_out + p.idler_washer_t, z)), COLORS["pivot"])
 
     for name, (obj, col) in bogie_grp.items():
         obj = _rot_y(obj, bx, bz, -theta)          # 보기: 로커 회전 상쇄
@@ -490,16 +536,18 @@ def build_assembly(p: SuspensionParams, theta_left: float = 0.0) -> cq.Assembly:
         "bogie_bearing": make_bearing_pair(p.bogie_shaft_d, 4.0),
         "front_fork": make_front_fork(p),
         "standoff": make_standoff(p),
+        "axle_holder": make_axle_holder(p),
+        "idler_spacer": make_spacer(p, p.wheel_gap - p.pivot_block_t),
+        "idler_washer": make_spacer(p, p.idler_washer_t),
+        "idler_bearing": make_bearing_pair(p.axle_d, idler_bearing_gap(p)),
     }
     parts["rocker_shaft"] = make_rocker_shaft(p)
     parts["rocker_shaft_len"] = p.pivot_block_t + 2 * brg16["width"] + 6 + 12
     parts["bogie_shaft"] = make_bogie_shaft(p)
     parts["bogie_shaft_len"] = p.plate_t + p.plate_gap + 2 * brg12["width"] + 4 + 10
-    ov_f = d["y_wheel_c"] - d["y_rocker_in"]
-    ov_mb = d["y_wheel_c"] - d["y_bogie_in"]
     parts["axle_front"] = make_front_axle(p)
-    parts["axle_mb"] = make_axle(p, ov_mb)
-    parts["axle_mb_len"] = ov_mb + WHEELS[p.wheel_d]["width"] / 2 + 8
+    parts["axle_mb"] = make_axle(p)
+    parts["axle_mb_len"] = idler_axle_length(p)
 
     asm = cq.Assembly(name="rocker_bogie_suspension")
     for name, obj in make_frame(p).items():
