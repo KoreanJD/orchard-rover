@@ -39,6 +39,19 @@ BEARINGS: Dict[int, Dict[str, float]] = {
     20: {"od": 42.0, "width": 12.0, "load": 6120.0, "name": "6004ZZ"},
 }
 
+BEARING_HOLDERS: Dict[int, Dict[str, float]] = {
+    # 베어링 내경 : MISUMI BGRBB 베어링 홀더 세트 (라운드 플랜지, 더블 베어링, 스냅링 고정, S45C 사삼산화철)
+    # 카탈로그 기호: L 전체 길이 / T 플랜지 두께 / H 플랜지 외경 / D 몸통 외경(g6, 판 구멍에 끼움)
+    #   / pcd 볼트 원 (4 홀: 관통 d2 = hole, 카운터보어 d1 = cb × 깊이 H1 = cb_h)
+    #   / l 끝면→베어링 거리 — kr.misumi-ec.com 2026-10-31 확인
+    # 과수원 분진 → DD (접촉 고무 씰). 판 쪽은 볼트 탭 (tap = 탭 드릴경)
+    20: {"name": "BGRBB6004DD-40", "L": 40.0, "T": 11.0, "H": 77.0, "D": 50.0, "pcd": 64.0,
+         "bolt": "M6", "hole": 6.6, "cb": 11.0, "cb_h": 6.1, "tap": 5.0, "l": 3.95, "price": 43920.0},
+    12: {"name": "BGRBB6001DD-25", "L": 25.0, "T": 8.0, "H": 52.0, "D": 34.0, "pcd": 42.0,
+         "bolt": "M4", "hole": 4.5, "cb": 8.0, "cb_h": 4.1, "tap": 3.3, "l": 2.85,
+         "price": 25050.0},   # ZZ 22,770 × DD 1.1
+}
+
 WHEELS: Dict[int, Dict[str, float]] = {
     # 직경 : {폭, 보어(액슬), 허용 하중(N), 종류}
     # UWRF 우레탄 (MISUMI) — 실내/평지용, 과수원에는 소형
@@ -121,8 +134,9 @@ class SuspensionParams:
     shf_flange_h: float = 34.0    # A (플랜지 높이, 단순화: 사각+필렛)
     collar_od: float = 40.0       # PSCS20-12 세트 칼라 (슬릿, 내경 20 / 외경 40 / 폭 12)
     collar_w: float = 12.0
-    block_gap: float = 2.0        # 서포트-로커 플레이트 간 스러스트 와셔 간극
-    plate_gap: float = 6.0        # 로커-보기 플레이트 간 와셔 간격
+    block_gap: float = 2.0        # SHF20 보스 끝 - 로커 베어링 홀더 플랜지 간극 (내륜 스페이서)
+    # 로커-보기 플레이트 간격: 보기 홀더(BGRBB6001, 판 바깥면 플랜지) 몸통이 판 안쪽으로 5 돌출 + 간극 3
+    plate_gap: float = 8.0
     # 보기 플레이트-휠 내측면 간격 = 아이들러 축 SHF20 홀더 돌출 T20 + 내륜 스페이서 4
     # (로커 축 끝·PSCS20 칼라보다 휠이 Y 바깥)
     wheel_gap: float = 24.0
@@ -175,7 +189,8 @@ class SuspensionParams:
         # Y 적층 (좌측, 안쪽→바깥쪽)
         y0 = self.frame_half_w
         y_block_out = y0 + self.pivot_block_t
-        y_rocker_in = y_block_out + self.block_gap
+        # 로커 베어링 홀더 플랜지는 로커 판 안쪽 면 (몸통이 판을 관통해 바깥으로)
+        y_rocker_in = y_block_out + self.block_gap + BEARING_HOLDERS[self.rocker_journal_d]["T"]
         y_rocker_out = y_rocker_in + self.plate_t
         y_bogie_in = y_rocker_out + self.plate_gap
         y_bogie_out = y_bogie_in + self.plate_t
@@ -350,8 +365,8 @@ class SuspensionParams:
 
         # 로커 피벗 축: SHF20 클램프 중심 → 로커 베어링 쌍 중심 캔틸레버 (SFJ 는 SUJ2 지만 보수적으로 SUS304 σy)
         y_clamp = self.frame_half_w + self.shf_flange_t + self.shf_boss_len / 2
-        brg = BEARINGS[self.rocker_journal_d]
-        y_brg = self.derived["y_rocker_in"] + (2 * brg["width"] + 6) / 2
+        hold = BEARING_HOLDERS[self.rocker_journal_d]
+        y_brg = self.derived["y_rocker_in"] - hold["T"] + hold["L"] / 2   # 홀더 안 베어링 쌍 중심
         z_shaft = math.pi * self.rocker_shaft_d ** 3 / 32.0
         sf["rocker_shaft_at_support"] = 205.0 / (side_dyn * (y_brg - y_clamp) / z_shaft)
 

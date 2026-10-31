@@ -3,7 +3,8 @@
 생성물 (output/ 디렉터리):
     parts/*.step        : 개별 부품 STEP
     rocker_bogie_assembly.step / .stl : 전체 조립체 (프레임 참조 포함)
-    dxf/rocker_plate.dxf, dxf/bogie_plate.dxf : 워터젯/레이저 가공용 2D 외형
+    dxf/rocker_plate.dxf, dxf/bogie_plate.dxf, dxf/diff_bar.dxf : 워터젯/레이저 가공용 2D 외형
+        (베어링 보스 없음 — MISUMI BGRBB 홀더를 판 구멍에 끼우고 볼트 체결)
     rocker_bogie_iso.svg / .png, _side.svg : 검토용 투영 뷰
 
 좌표계: X 전방, Y 좌측, Z 상방 (지면 Z=0). 모든 치수 mm.
@@ -22,7 +23,7 @@ from typing import Dict, List, Tuple
 
 import cadquery as cq
 
-from orchard_rover.rocker_bogie_params import BEARINGS, WHEELS, SuspensionParams
+from orchard_rover.rocker_bogie_params import BEARING_HOLDERS, BEARINGS, WHEELS, SuspensionParams
 
 Point2 = Tuple[float, float]
 
@@ -81,6 +82,20 @@ def _place_y(solid: cq.Workplane, y_in: float, t: float) -> cq.Workplane:
     return solid.translate((0, y_in + t, 0))
 
 
+def holder_bolt_points(hold: Dict[str, float]) -> List[Point2]:
+    """BGRBB 플랜지 볼트 4 홀 (P.C.D., 45° 배치 — 막대 방향과 어긋나게) 의 홀더 중심 기준 좌표."""
+    r = hold["pcd"] / 2
+    return [(r * math.cos(math.radians(a)), r * math.sin(math.radians(a))) for a in (45, 135, 225, 315)]
+
+
+def _holder_seat(plate: cq.Workplane, c: Point2, hold: Dict[str, float]) -> cq.Workplane:
+    """베어링 홀더 자리: 몸통 끼움 구멍 D (H7) + 플랜지 볼트 탭 4 (판 쪽 나사)."""
+    plate = _hole(plate, c, hold["D"])
+    for dx, dz in holder_bolt_points(hold):
+        plate = _hole(plate, (c[0] + dx, c[1] + dz), hold["tap"])
+    return plate
+
+
 # ---------------------------------------------------------------------------
 # 개별 부품
 # ---------------------------------------------------------------------------
@@ -88,21 +103,16 @@ def make_rocker_plate(p: SuspensionParams) -> cq.Workplane:
     """로커 플레이트 (Al 6061-T6, 두께 plate_t).
 
     P(차체 피벗) 에서 F(전방 휠), B(보기 피벗), U(차동 링크) 로 뻗는 3-암 플레이트.
-    P 에는 6004ZZ ×2 베어링 포켓 보스, F 에는 허브모터 M12 축 홀, B 에는 Ø12 축 압입 홀.
+    P 에는 베어링 홀더(BGRBB6004DD) 자리, F 에는 허브모터 M12 축 홀, B 에는 Ø12 축 압입 홀.
+    단일 두께 판 (워터젯 + 탭) — 베어링 보스는 상용 홀더를 볼트로 체결.
     """
     pts = p.side_points()
     w, t = p.arm_w, p.plate_t
-    brg = BEARINGS[p.rocker_journal_d]
+    hold = BEARING_HOLDERS[p.rocker_journal_d]
     segs = [(pts["P"], pts["F"]), (pts["P"], pts["B"]), (pts["P"], pts["U"])]
-    bosses = [(pts["P"], brg["od"] + 20), (pts["F"], w), (pts["B"], w), (pts["U"], w)]
+    bosses = [(pts["P"], hold["H"] + 6), (pts["F"], w), (pts["B"], w), (pts["U"], w)]
     plate = _plate_from_bars(segs, w, t, bosses)
-
-    # 베어링 하우징 보스: 플레이트 외측(+Y 방향은 배치 후)으로 2×베어링 폭 확보
-    boss_len = 2 * brg["width"] + 6 - t
-    boss = (cq.Workplane("XZ").center(*pts["P"]).circle(brg["od"] / 2 + 8)
-            .extrude(-boss_len))                     # +Y 쪽으로 돌출
-    plate = plate.union(boss)
-    plate = _hole(plate, pts["P"], brg["od"] - 0.01)   # 베어링 압입 포켓 (H7)
+    plate = _holder_seat(plate, pts["P"], hold)
     plate = _hole(plate, pts["F"], p.front_axle_d + 0.05)   # 허브모터 축 (드롭아웃은 모터 사양 확정 후)
     plate = _hole(plate, pts["B"], p.bogie_shaft_d - 0.02)  # 보기 축 압입
     plate = _hole(plate, pts["U"], 8.2)                 # 로드엔드 M8 볼트
@@ -120,15 +130,11 @@ def make_bogie_plate(p: SuspensionParams) -> cq.Workplane:
     """보기 플레이트 — B(피벗) 에서 M(중간 휠), R(후방 휠) 로 뻗는 V자 플레이트."""
     pts = p.side_points()
     w, t = p.arm_w, p.plate_t
-    brg = BEARINGS[p.bogie_shaft_d]
+    hold = BEARING_HOLDERS[p.bogie_shaft_d]
     segs = [(pts["B"], pts["M"]), (pts["B"], pts["R"])]
-    bosses = [(pts["B"], brg["od"] + 16), (pts["M"], w), (pts["R"], w)]
+    bosses = [(pts["B"], hold["H"] + 6), (pts["M"], w), (pts["R"], w)]
     plate = _plate_from_bars(segs, w, t, bosses)
-    boss_len = 2 * brg["width"] + 4 - t
-    boss = (cq.Workplane("XZ").center(*pts["B"]).circle(brg["od"] / 2 + 6)
-            .extrude(-boss_len))
-    plate = plate.union(boss)
-    plate = _hole(plate, pts["B"], brg["od"] - 0.01)
+    plate = _holder_seat(plate, pts["B"], hold)          # BGRBB6001DD (플랜지는 판 바깥면)
     for key in ("M", "R"):
         x, z = pts[key]
         plate = _hole(plate, (x, z), p.axle_d + 0.05)              # SFJ20 (SHF20 홀더가 클램프)
@@ -169,9 +175,32 @@ def make_axle_holder(p: SuspensionParams) -> cq.Workplane:
     return make_pivot_block(p, p.axle_d).rotate((0, 0, 0), (0, 1, 0), 90)
 
 
-def make_spacer(p: SuspensionParams, length: float) -> cq.Workplane:
-    """아이들러 축 스페이서/와셔 Ø20/Ø28 — 베어링 내륜만 받친다 (+Y 방향 0 → length)."""
-    return cq.Workplane("XZ").circle(14.0).circle(p.axle_d / 2 + 0.01).extrude(-length)
+def make_spacer(p: SuspensionParams, length: float, bore: float = None, od: float = 28.0) -> cq.Workplane:
+    """축 스페이서/와셔 (기본 Ø20/Ø28) — 베어링 내륜만 받친다 (+Y 방향 0 → length)."""
+    bore = p.axle_d if bore is None else bore
+    return cq.Workplane("XZ").circle(od / 2).circle(bore / 2 + 0.01).extrude(-length)
+
+
+def make_bearing_holder(bore: int) -> cq.Workplane:
+    """MISUMI BGRBB 베어링 홀더 (라운드 플랜지) — 플랜지 Y 0→T, 몸통 T→L (+Y).
+
+    베어링 자리(OD − 0.01) 관통, 플랜지 볼트 4 홀은 플랜지 바깥면(Y 0)에서 카운터보어.
+    베어링은 make_bearing_pair 로 따로 (양 끝에서 l 안쪽).
+    """
+    hold = BEARING_HOLDERS[bore]
+    flange = cq.Workplane("XZ").circle(hold["H"] / 2).extrude(-hold["T"])
+    body = cq.Workplane("XZ").circle(hold["D"] / 2 - 0.02).extrude(-hold["L"])
+    h = flange.union(body).cut(
+        cq.Workplane("XZ").circle((BEARINGS[bore]["od"] - 0.01) / 2).extrude(hold["L"] + 2, both=True))
+    pts = holder_bolt_points(hold)
+    h = h.cut(cq.Workplane("XZ").pushPoints(pts).circle(hold["hole"] / 2).extrude(hold["T"] + 2, both=True))
+    return h.cut(cq.Workplane("XZ").pushPoints(pts).circle(hold["cb"] / 2).extrude(-hold["cb_h"]))
+
+
+def holder_bearing_gap(bore: int) -> float:
+    """홀더 안 베어링 2개 사이 간격 (양 끝에서 l 안쪽에 하나씩)."""
+    hold = BEARING_HOLDERS[bore]
+    return hold["L"] - 2 * hold["l"] - 2 * BEARINGS[bore]["width"]
 
 
 def make_shaft_collar(p: SuspensionParams) -> cq.Workplane:
@@ -180,26 +209,33 @@ def make_shaft_collar(p: SuspensionParams) -> cq.Workplane:
             .extrude(-p.collar_w))   # 아이들러 축(SFJ20)에도 같은 칼라
 
 
+def rocker_shaft_length(p: SuspensionParams) -> float:
+    """로커 피벗 축 길이: 레일 면 → SHF20 | 간극 | BGRBB6004 홀더 L | 1 | PSCS20 칼라 | 2."""
+    return p.pivot_block_t + p.block_gap + BEARING_HOLDERS[p.rocker_journal_d]["L"] + 1 + p.collar_w + 2
+
+
 def make_rocker_shaft(p: SuspensionParams) -> cq.Workplane:
-    """로커 피벗 축 — SHF20 클램프 | 6004ZZ ×2 저널 | PSCS20 칼라 (저널경 = 축경이면 직선축).
+    """로커 피벗 축 — SHF20 클램프 | 홀더(6004 ×2) 저널 | PSCS20 칼라 (저널경 = 축경이면 직선축).
 
     저널이 굵으면 단붙이: 베어링은 바깥 끝으로 넘겨 끼우고 안쪽 단차가 내측 베어링 내륜을 받친다.
     """
-    brg = BEARINGS[p.rocker_journal_d]
     l_in = p.pivot_block_t + p.block_gap
-    l_brg = 2 * brg["width"] + 6
-    length = l_in + l_brg + p.collar_w + 2
+    l_brg = BEARING_HOLDERS[p.rocker_journal_d]["L"]
+    length = rocker_shaft_length(p)
     shaft = cq.Workplane("XZ").circle(p.rocker_shaft_d / 2).extrude(-length)
     journal = (cq.Workplane("XZ").circle(p.rocker_journal_d / 2).extrude(-l_brg)
                .translate((0, l_in, 0)))
     return shaft.union(journal)
 
 
+def bogie_shaft_length(p: SuspensionParams) -> float:
+    """보기 축 길이: 로커 판 내측면 → 로커 판 | 간격 | 보기 판 | 홀더 플랜지 T | 10 (멈춤링 자리)."""
+    return 2 * p.plate_t + p.plate_gap + BEARING_HOLDERS[p.bogie_shaft_d]["T"] + 10
+
+
 def make_bogie_shaft(p: SuspensionParams) -> cq.Workplane:
-    """보기 피벗 축 SFJ12 — 로커 플레이트 압입 + 보기 베어링 보스."""
-    brg = BEARINGS[p.bogie_shaft_d]
-    length = p.plate_t + p.plate_gap + 2 * brg["width"] + 4 + 10
-    return cq.Workplane("XZ").circle(p.bogie_shaft_d / 2).extrude(-length)
+    """보기 피벗 축 SFJ12 — 로커 플레이트 압입 + 보기 베어링 홀더 (BGRBB6001DD)."""
+    return cq.Workplane("XZ").circle(p.bogie_shaft_d / 2).extrude(-bogie_shaft_length(p))
 
 
 def make_bearing_pair(bore: float, gap: float, plane: str = "XZ") -> cq.Workplane:
@@ -304,31 +340,44 @@ def make_hub_motor_wheel(p: SuspensionParams) -> cq.Workplane:
 
 
 def make_diff_bar(p: SuspensionParams) -> cq.Workplane:
-    """차동 바 — 중앙 Z축 피벗(6001ZZ ×2), 양단 M8 로드엔드 홀."""
+    """차동 바 — 단일 두께 판 (워터젯 + 탭): 중앙 패드에 베어링 홀더(BGRBB6001DD) 자리, 양단 M8 로드엔드 홀.
+
+    홀더 플랜지는 바 윗면, 몸통이 바를 관통해 아래로 (L − T − t) 돌출.
+    """
     half = p.derived["diff_bar_half_len"]
-    brg = BEARINGS[12]
+    hold = BEARING_HOLDERS[12]
     bar = (cq.Workplane("XY").slot2D(2 * half + p.diff_bar_w, p.diff_bar_w, 90)
            .extrude(p.diff_bar_t))
-    hub = cq.Workplane("XY").circle(brg["od"] / 2 + 8).extrude(2 * brg["width"] + 4)
-    bar = bar.union(hub)
-    bar = bar.faces(">Z").workplane().circle(brg["od"] / 2 - 0.005).cutThruAll()
-    bar = (bar.faces(">Z").workplane().pushPoints([(0, half), (0, -half)])
-           .circle(4.1).cutThruAll())
+    bar = bar.union(cq.Workplane("XY").circle((hold["H"] + 6) / 2).extrude(p.diff_bar_t))
+    bar = bar.cut(cq.Workplane("XY").circle(hold["D"] / 2).extrude(p.diff_bar_t + 2, both=True))
+    bar = bar.cut(cq.Workplane("XY").pushPoints(holder_bolt_points(hold)).circle(hold["tap"] / 2)
+                  .extrude(p.diff_bar_t + 2, both=True))
+    bar = bar.cut(cq.Workplane("XY").pushPoints([(0, half), (0, -half)]).circle(4.1)
+                  .extrude(p.diff_bar_t + 2, both=True))
     return bar.translate((0, 0, -p.diff_bar_t / 2))
+
+
+def diff_holder_bottom_z(p: SuspensionParams) -> float:
+    """차동 바 홀더 몸통 아래 끝 Z (플랜지가 바 윗면에 앉음)."""
+    hold = BEARING_HOLDERS[12]
+    return p.z_diff_bar + p.diff_bar_t / 2 + hold["T"] - hold["L"]
 
 
 def make_diff_post(p: SuspensionParams) -> cq.Workplane:
     """차동 바 피벗 포스트 — 상부 크로스멤버(HFS5-4040, Y 방향) 위 M5 ×4, Ø12 수직 핀.
 
     체결 홀은 크로스멤버 상면 홈 2줄(X ±10)에 Y ±22 (시리즈 5 T너트는 M5 까지).
+    기둥 끝은 홀더 몸통 아래 2 (내륜 스페이서 자리), 핀은 홀더 윗면 위 4 (멈춤링 자리).
     """
-    height = p.z_diff_bar - p.diff_bar_t / 2 - (p.z_frame_top_rail + p.frame_profile / 2)
+    base = p.z_frame_top_rail + p.frame_profile / 2
+    col = diff_holder_bottom_z(p) - 2 - base
     post = (cq.Workplane("XY").rect(80, 60).extrude(10)            # 베이스 플레이트
-            .faces(">Z").workplane().circle(16).extrude(height - 10 - 2))
+            .faces(">Z").workplane().circle(16).extrude(col - 10))
     slot = p.hfs5_slot_offset
     post = post.cut(cq.Workplane("XY").pushPoints([(sx * slot, sy * 22.0) for sx in (1, -1) for sy in (1, -1)])
                     .circle(2.75).extrude(12).translate((0, 0, -1)))
-    pin = cq.Workplane("XY").circle(6).extrude(height + 2 * BEARINGS[12]["width"] + 8)
+    pin_top = p.z_diff_bar + p.diff_bar_t / 2 + BEARING_HOLDERS[12]["T"] + 4
+    pin = cq.Workplane("XY").circle(6).extrude(pin_top - base)
     return post.union(pin)
 
 
@@ -467,13 +516,23 @@ def _side(p: SuspensionParams, side: float, theta: float,
         "standoff_F": (parts["standoff"].translate((sx, d["y_rocker_in"] + p.plate_t, sz)), COLORS["pivot"]),
         "bogie_shaft": (parts["bogie_shaft"].translate((bx, d["y_rocker_in"], bz)), COLORS["pivot"]),
     }
+    # 로커 베어링 홀더 BGRBB6004DD: 플랜지가 로커 판 안쪽 면, 몸통이 판을 관통해 바깥으로
+    hr, hb = BEARING_HOLDERS[p.rocker_journal_d], BEARING_HOLDERS[p.bogie_shaft_d]
+    y_rh = d["y_rocker_in"] - hr["T"]                       # 로커 홀더 플랜지 안쪽 끝
+    rocker_grp["rocker_holder"] = (parts["rocker_holder"].translate((px, y_rh, pz)), COLORS["frame"])
+    # 보기 베어링 홀더 BGRBB6001DD: 플랜지가 보기 판 바깥면, 몸통이 판을 관통해 안쪽으로
+    y_bogie_out = d["y_bogie_in"] + p.plate_t
+    y_bh = y_bogie_out + hb["T"] - hb["L"]                  # 보기 홀더 몸통 안쪽 끝
+    # 로커 판 바깥면 → 보기 안쪽 베어링 내륜 스페이서 (로커와 함께 정지)
+    rocker_grp["bogie_spacer"] = (
+        parts["bogie_spacer"].translate((bx, d["y_rocker_in"] + p.plate_t, bz)), COLORS["pivot"])
     # --- 보기 그룹 (B 기준, 로커 회전 상쇄) ---
     bogie_grp: Dict[str, Tuple[cq.Workplane, cq.Color]] = {
         "bogie_plate": (_place_y(parts["bogie_plate"], d["y_bogie_in"], p.plate_t), COLORS["bogie"]),
-        # 보기 보스 6001ZZ ×2 (간격 4) — 보기 축 위
-        "bogie_bearing": (parts["bogie_bearing"].translate((bx, d["y_bogie_in"], bz)), COLORS["pivot"]),
+        "bogie_holder": (parts["bogie_holder"].translate((bx, y_bogie_out + hb["T"], bz)), COLORS["frame"]),
+        # 홀더 안 6001 ×2 (양 끝에서 l 안쪽) — 보기 축 위
+        "bogie_bearing": (parts["bogie_bearing"].translate((bx, y_bh + hb["l"], bz)), COLORS["pivot"]),
     }
-    y_bogie_out = d["y_bogie_in"] + p.plate_t
     y_wheel_out = d["y_wheel_in"] + wdt
     for key in ("M", "R"):
         x, z = pts[key]
@@ -498,10 +557,13 @@ def _side(p: SuspensionParams, side: float, theta: float,
     # --- 프레임 고정부 ---
     shapes["pivot_block"] = (parts["pivot_block"].translate((px, p.frame_half_w, pz)), COLORS["frame"])
     shapes["rocker_shaft"] = (parts["rocker_shaft"].translate((px, p.frame_half_w, pz)), COLORS["pivot"])
-    y_collar = d["y_rocker_in"] + p.plate_t + (2 * BEARINGS[p.rocker_journal_d]["width"] + 6 - p.plate_t) + 1
-    shapes["shaft_collar"] = (parts["shaft_collar"].translate((px, y_collar, pz)), COLORS["pivot"])
-    # 로커 보스 6004ZZ ×2 (간격 6) — 축 저널 위 (회전 대칭이라 로커 각과 무관)
-    shapes["rocker_bearing"] = (parts["rocker_bearing"].translate((px, d["y_rocker_in"], pz)), COLORS["pivot"])
+    # 축 위 정지 부품 (회전 대칭이라 로커 각과 무관): SHF20 | 스페이서 | 홀더 안 6004 ×2 | 스페이서 | 칼라
+    shapes["rocker_spacer_in"] = (
+        parts["rocker_spacer_in"].translate((px, p.frame_half_w + p.pivot_block_t, pz)), COLORS["pivot"])
+    shapes["rocker_bearing"] = (parts["rocker_bearing"].translate((px, y_rh + hr["l"], pz)), COLORS["pivot"])
+    shapes["rocker_spacer_out"] = (
+        parts["rocker_spacer_out"].translate((px, y_rh + hr["L"] - hr["l"], pz)), COLORS["pivot"])
+    shapes["shaft_collar"] = (parts["shaft_collar"].translate((px, y_rh + hr["L"] + 1, pz)), COLORS["pivot"])
 
     sub = cq.Assembly(name=f"suspension_{tag}")
     for name, (obj, col) in shapes.items():
@@ -520,7 +582,7 @@ def build_assembly(p: SuspensionParams, theta_left: float = 0.0) -> cq.Assembly:
     """
     phi, theta_right = (0.0, 0.0) if abs(theta_left) < 1e-9 else p.differential_response(theta_left)
     d = p.derived
-    brg16, brg12 = BEARINGS[p.rocker_journal_d], BEARINGS[p.bogie_shaft_d]
+    hr, hb = BEARING_HOLDERS[p.rocker_journal_d], BEARING_HOLDERS[p.bogie_shaft_d]
 
     parts: Dict[str, cq.Workplane] = {
         "rocker_plate": make_rocker_plate(p),
@@ -532,8 +594,15 @@ def build_assembly(p: SuspensionParams, theta_left: float = 0.0) -> cq.Assembly:
         "diff_bar": make_diff_bar(p),
         "diff_post": make_diff_post(p),
         "link_rod": make_link_rod(p),
-        "rocker_bearing": make_bearing_pair(p.rocker_journal_d, 6.0),
-        "bogie_bearing": make_bearing_pair(p.bogie_shaft_d, 4.0),
+        "rocker_holder": make_bearing_holder(p.rocker_journal_d),
+        "rocker_bearing": make_bearing_pair(p.rocker_journal_d, holder_bearing_gap(p.rocker_journal_d)),
+        "rocker_spacer_in": make_spacer(p, p.block_gap + hr["l"], p.rocker_journal_d),
+        "rocker_spacer_out": make_spacer(p, hr["l"] + 1, p.rocker_journal_d),
+        # 보기 홀더는 플랜지를 판 바깥면에 두므로 Y 반전 (플랜지 −T→0, 몸통 −L→−T)
+        "bogie_holder": make_bearing_holder(p.bogie_shaft_d).mirror("XZ"),
+        "bogie_bearing": make_bearing_pair(p.bogie_shaft_d, holder_bearing_gap(p.bogie_shaft_d)),
+        "bogie_spacer": make_spacer(p, p.plate_gap - (hb["L"] - hb["T"] - p.plate_t) + hb["l"],
+                                    p.bogie_shaft_d, 16.0),
         "front_fork": make_front_fork(p),
         "standoff": make_standoff(p),
         "axle_holder": make_axle_holder(p),
@@ -542,9 +611,9 @@ def build_assembly(p: SuspensionParams, theta_left: float = 0.0) -> cq.Assembly:
         "idler_bearing": make_bearing_pair(p.axle_d, idler_bearing_gap(p)),
     }
     parts["rocker_shaft"] = make_rocker_shaft(p)
-    parts["rocker_shaft_len"] = p.pivot_block_t + 2 * brg16["width"] + 6 + 12
+    parts["rocker_shaft_len"] = rocker_shaft_length(p)
     parts["bogie_shaft"] = make_bogie_shaft(p)
-    parts["bogie_shaft_len"] = p.plate_t + p.plate_gap + 2 * brg12["width"] + 4 + 10
+    parts["bogie_shaft_len"] = bogie_shaft_length(p)
     parts["axle_front"] = make_front_axle(p)
     parts["axle_mb"] = make_axle(p)
     parts["axle_mb_len"] = idler_axle_length(p)
@@ -559,11 +628,18 @@ def build_assembly(p: SuspensionParams, theta_left: float = 0.0) -> cq.Assembly:
     xd = d["x_diff_pivot"]
     asm.add(parts["diff_post"].translate((xd, 0, p.z_frame_top_rail + p.frame_profile / 2)),
             name="diff_post", color=COLORS["frame"])
-    asm.add(parts["diff_bar"], name="diff_bar", color=COLORS["diff"],
-            loc=cq.Location(cq.Vector(xd, 0, p.z_diff_bar), cq.Vector(0, 0, 1), math.degrees(phi)))
-    # 차동 바 허브 6001ZZ ×2 (간격 4) — 포스트 Ø12 핀 위, 허브 하단(바 하면)부터
-    asm.add(make_bearing_pair(12, 4.0, "XY").translate((xd, 0, p.z_diff_bar - p.diff_bar_t / 2)),
+    bar_loc = cq.Location(cq.Vector(xd, 0, p.z_diff_bar), cq.Vector(0, 0, 1), math.degrees(phi))
+    asm.add(parts["diff_bar"], name="diff_bar", color=COLORS["diff"], loc=bar_loc)
+    # 차동 바 홀더 BGRBB6001DD: 플랜지가 바 윗면 (+Y 축 → −Z 로 돌려 몸통이 아래로)
+    holder = (make_bearing_holder(12).rotate((0, 0, 0), (1, 0, 0), -90)
+              .translate((0, 0, p.diff_bar_t / 2 + hb["T"])))
+    asm.add(holder, name="diff_holder", color=COLORS["frame"], loc=bar_loc)
+    # 홀더 안 6001 ×2 — 포스트 Ø12 핀 위, 기둥 끝 ↔ 아래 베어링 내륜 스페이서
+    z_hb = diff_holder_bottom_z(p)
+    asm.add(make_bearing_pair(12, holder_bearing_gap(12), "XY").translate((xd, 0, z_hb + hb["l"])),
             name="diff_bearing", color=COLORS["pivot"])
+    asm.add(make_spacer(p, 2 + hb["l"], 12, 16.0).rotate((0, 0, 0), (1, 0, 0), 90)
+            .translate((xd, 0, z_hb - 2)), name="diff_spacer", color=COLORS["pivot"])
     for side, th in ((+1.0, theta_left), (-1.0, theta_right)):
         ux, uz = p.upright_top(th)
         uy = side * d["y_rocker_c"]
@@ -614,8 +690,10 @@ def export_all(p: SuspensionParams, out: Path, theta_left_deg: float = 0.0) -> D
         # X축 기준 -90° 회전: (x, y, z) → (x, z, -y) — 높이 Z 가 도면 +Y 로, 두께가 +Z 로
         flat = singles[name].rotate((0, 0, 0), (1, 0, 0), -90)
         # section() 은 작업평면 법선 기준이므로 XY 작업평면에 다시 올린다
-        section = cq.Workplane("XY").add(flat.val()).section(p.plate_t / 2)   # 보스 제외, 홀 포함
+        section = cq.Workplane("XY").add(flat.val()).section(p.plate_t / 2)   # 단일 두께 판, 홀 포함
         cq.exporters.exportDXF(section, str(out / "dxf" / f"{name}.dxf"))
+    # 차동 바는 XY 평면 판 (두께 중심 Z 0)
+    cq.exporters.exportDXF(singles["diff_bar"].section(0.0), str(out / "dxf" / "diff_bar.dxf"))
 
     asm = build_assembly(p, math.radians(theta_left_deg))
     asm.save(str(out / "rocker_bogie_assembly.step"))
