@@ -183,6 +183,13 @@ def test_misumi_standard_sizes(params: SuspensionParams) -> None:
     assert WHEELS[params.wheel_d]["bore"] == params.axle_d
 
 
+def test_idler_axle_uses_rocker_pivot_parts(params: SuspensionParams) -> None:
+    """아이들러 축 = 휠 허브 베어링 내경 = SHF20·PSCS20-12 축경, 보기-휠 간격 = 홀더 T20 + 스페이서."""
+    assert params.axle_d in BEARINGS
+    assert params.axle_d == params.rocker_shaft_d
+    assert params.wheel_gap - params.pivot_block_t >= 2.0
+
+
 # ---------------------------------------------------------------------------
 # CAD 생성 (cadquery 설치 시)
 # ---------------------------------------------------------------------------
@@ -283,3 +290,32 @@ def test_frame_slots_under_pivot_holder_bolts(params: SuspensionParams) -> None:
         probe = cq.Workplane("XZ").center(x, params.z_rocker_pivot).circle(2.5).extrude(-3).translate(
             (0, params.frame_half_w - 1.5, 0)).val()                # 바깥 면 안쪽 1.5 (홈 립 깊이 이내)
         assert rail.intersect(probe).Volume() < 1e-6
+
+
+# ---------------------------------------------------------------------------
+# 아이들러 휠 축 고정 (SFJ20 + SHF20 홀더 + 스페이서 + 베어링 ×2 + 와셔 + PSCS20-12)
+# ---------------------------------------------------------------------------
+def test_idler_axle_stack_is_retained(params: SuspensionParams) -> None:
+    """보기 판 → 홀더 → 스페이서 → 휠 베어링 → 와셔 → 칼라가 빈틈없이 닿고 겹치지 않으며, 축이 칼라를 관통."""
+    from orchard_rover.rocker_bogie_cad import build_assembly
+
+    shapes = {}
+
+    def walk(a, loc):
+        for ch in a.children:
+            l = loc * ch.loc if ch.loc is not None else loc
+            if ch.obj is not None:
+                shapes[ch.name] = ch.obj.val().moved(l)
+            walk(ch, l)
+
+    walk(build_assembly(params, 0.0), cq.Location())
+    for k in ("M", "R"):
+        chain = ["bogie_plate_L", f"axle_holder_{k}_L", f"idler_spacer_{k}_L", f"wheel_bearing_{k}_L",
+                 f"idler_washer_{k}_L", f"idler_collar_{k}_L"]
+        for a, b in zip(chain, chain[1:]):
+            assert shapes[a].distance(shapes[b]) < 1e-6, (a, b)
+            assert shapes[a].intersect(shapes[b]).Volume() < 0.01, (a, b)
+        axle = shapes[f"axle_{k}_L"].BoundingBox()
+        collar = shapes[f"idler_collar_{k}_L"].BoundingBox()
+        assert collar.ymax < axle.ymax <= collar.ymax + 2 + 1e-6
+        assert shapes[f"wheel_{k}_L"].intersect(shapes[f"wheel_bearing_{k}_L"]).Volume() < 0.01
