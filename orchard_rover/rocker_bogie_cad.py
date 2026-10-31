@@ -16,8 +16,9 @@ from __future__ import annotations
 
 import argparse
 import math
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 import cadquery as cq
 
@@ -307,37 +308,86 @@ def make_link_rod(p: SuspensionParams) -> cq.Workplane:
     return rod.union(ends)
 
 
-def make_frame_reference(p: SuspensionParams) -> cq.Workplane:
-    """프레임 참조 — HFS5-4040 하부 사각 프레임 + 상부 사각 + 4 기둥 + 차동 크로스멤버.
+@dataclass(frozen=True)
+class FrameMember:
+    """HFS5-4040 부재 하나: 축 방향, 중심, 길이, 끝단 맞대기 수 (M5 탭 가공)."""
 
-    서스펜션 연결점 확인용이며 실제 프레임 상세(브라켓 등)는 별도 설계.
+    name: str
+    axis: str                                   # "X" | "Y" | "Z"
+    center: Tuple[float, float, float]
+    length: float
+    butt_ends: int
+
+
+HFS5_4040 = {"kg_per_m": 1.28, "area": 472.0, "I": 8.89e4}   # MISUMI 카탈로그
+
+
+def hfs5_4040_section() -> cq.Workplane:
+    """HFS5-4040 단면 (XY, 중심 원점) — 외곽 40, 면마다 홈 2줄 (중심 ±10, 개구 6), 코너 구멍 4-Ø4.2.
+
+    외곽·홈 위치·개구·코너 구멍은 카탈로그 외형도, T홈 내부·중앙 공동은 근사.
+    (모델 단면적 ≈ 570 mm², 카탈로그 472 — 질량은 카탈로그 값으로 계산)
+    """
+    slot = [(-3, 0), (3, 0), (3, 1.8), (5, 1.8), (5, 4.3), (2, 6.8), (-2, 6.8), (-5, 4.3), (-5, 1.8), (-3, 1.8)]
+    sec = cq.Workplane("XY").rect(40, 40).extrude(1)
+    cutters = []
+    for k in range(4):                                       # 면 4개: 회전 0/90/180/270
+        c, s = math.cos(k * math.pi / 2), math.sin(k * math.pi / 2)
+        for off in (-10.0, 10.0):
+            pts = []
+            for u, v in slot:                                # 면 (y = 20) 기준 → 회전
+                x, y = off + u, 20.0 - v
+                pts.append((c * x - s * y, s * x + c * y))
+            cutters.append(cq.Workplane("XY").polyline(pts).close().extrude(1))
+    octagon = [(13, 5), (5, 13), (-5, 13), (-13, 5), (-13, -5), (-5, -13), (5, -13), (13, -5)]
+    cutters.append(cq.Workplane("XY").polyline(octagon).close().extrude(1))
+    cutters.append(cq.Workplane("XY").pushPoints([(sx * 10, sy * 10) for sx in (1, -1) for sy in (1, -1)])
+                   .circle(2.1).extrude(1))
+    for ct in cutters:
+        sec = sec.cut(ct)
+    return sec
+
+
+def make_profile(length: float, axis: str) -> cq.Workplane:
+    """길이 length 의 HFS5-4040 부재, 축 방향 axis, 중심 원점."""
+    section = hfs5_4040_section().faces("<Z").val()
+    bar = cq.Workplane("XY").add(cq.Solid.extrudeLinear(section, cq.Vector(0, 0, length)))
+    bar = bar.translate((0, 0, -length / 2))
+    if axis == "X":
+        return bar.rotate((0, 0, 0), (0, 1, 0), 90)
+    if axis == "Y":
+        return bar.rotate((0, 0, 0), (1, 0, 0), 90)
+    return bar
+
+
+def frame_members(p: SuspensionParams) -> List[FrameMember]:
+    """구동체 프레임 HFS5-4040 부재 목록.
+
+    좌우 레일(X 1000)이 관통, 앞뒤 가로대·차동 크로스멤버(Y)는 레일 안쪽 면에 맞대기,
+    기둥(Z)은 하단 레일 위·상단 레일 아래에 맞대기. 맞대기 끝단은 M5 탭 (코너 구멍 Ø4.2),
+    상대 관통 부재에 렌치 홀 → 캡 스크류로 체결 (브라켓 없음: 레일 상·측면은 부품 체결면).
     """
     pr = p.frame_profile
     hw = p.frame_half_w - pr / 2            # 레일 중심 Y
-    hl = p.frame_len / 2 - pr / 2           # 레일 중심 X
+    hl = p.frame_len / 2 - pr / 2           # 가로대·기둥 중심 X
     zl, zt = p.z_frame_low_rail, p.z_frame_top_rail
+    inner = 2 * hw - pr                     # 레일 안쪽 면 사이
+    out: List[FrameMember] = []
+    for lvl, z in (("low", zl), ("top", zt)):
+        for side, y in (("L", hw), ("R", -hw)):
+            out.append(FrameMember(f"rail_{lvl}_{side}", "X", (0.0, y, z), p.frame_len, 0))
+        for end, x in (("F", hl), ("B", -hl)):
+            out.append(FrameMember(f"cross_{lvl}_{end}", "Y", (x, 0.0, z), inner, 2))
+    for end, x in (("F", hl), ("B", -hl)):
+        for side, y in (("L", hw), ("R", -hw)):
+            out.append(FrameMember(f"post_{end}{side}", "Z", (x, y, 0.5 * (zl + zt)), zt - zl - pr, 2))
+    out.append(FrameMember("cross_diff", "Y", (p.derived["x_diff_pivot"], 0.0, zt), inner, 2))
+    return out
 
-    def rail_x(y: float, z: float, length: float) -> cq.Workplane:
-        return cq.Workplane("XY").box(length, pr, pr).translate((0, y, z))
 
-    def rail_y(x: float, z: float, length: float) -> cq.Workplane:
-        return cq.Workplane("XY").box(pr, length, pr).translate((x, 0, z))
-
-    frame = None
-    for z in (zl, zt):
-        for y in (hw, -hw):
-            r = rail_x(y, z, p.frame_len)
-            frame = r if frame is None else frame.union(r)
-        for x in (hl, -hl):
-            frame = frame.union(rail_y(x, z, 2 * hw - pr))
-    for x in (hl, -hl):
-        for y in (hw, -hw):
-            post = cq.Workplane("XY").box(pr, pr, zt - zl - pr).translate(
-                (x, y, 0.5 * (zl + zt)))
-            frame = frame.union(post)
-    # 차동 포스트용 상부 크로스멤버
-    frame = frame.union(rail_y(p.derived["x_diff_pivot"], zt, 2 * hw - pr))
-    return frame.clean()
+def make_frame(p: SuspensionParams) -> Dict[str, cq.Workplane]:
+    """프레임 부재별 형상 (구동체 좌표)."""
+    return {f"frame_{m.name}": make_profile(m.length, m.axis).translate(m.center) for m in frame_members(p)}
 
 
 # ---------------------------------------------------------------------------
@@ -436,7 +486,6 @@ def build_assembly(p: SuspensionParams, theta_left: float = 0.0) -> cq.Assembly:
         "diff_bar": make_diff_bar(p),
         "diff_post": make_diff_post(p),
         "link_rod": make_link_rod(p),
-        "frame": make_frame_reference(p),
         "rocker_bearing": make_bearing_pair(p.rocker_journal_d, 6.0),
         "bogie_bearing": make_bearing_pair(p.bogie_shaft_d, 4.0),
         "front_fork": make_front_fork(p),
@@ -453,7 +502,8 @@ def build_assembly(p: SuspensionParams, theta_left: float = 0.0) -> cq.Assembly:
     parts["axle_mb_len"] = ov_mb + WHEELS[p.wheel_d]["width"] / 2 + 8
 
     asm = cq.Assembly(name="rocker_bogie_suspension")
-    asm.add(parts["frame"], name="frame_ref", color=COLORS["frame"])
+    for name, obj in make_frame(p).items():
+        asm.add(obj, name=name, color=COLORS["frame"])
     asm.add(_side(p, +1.0, theta_left, parts), name="left")
     asm.add(_side(p, -1.0, theta_right, parts), name="right")
 

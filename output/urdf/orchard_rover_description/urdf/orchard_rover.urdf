@@ -3,9 +3,9 @@
   <!-- orchard_rover.urdf_export 생성. 단위 m, 메시는 mm STL × 0.001 -->
   <link name="base_link">
     <inertial>
-      <origin xyz="0.0274718237 0 0.324671082" rpy="0 0 0"/>
-      <mass value="124.523125"/>
-      <inertia ixx="30.5997699" ixy="0" ixz="-1.16968635" iyy="23.9341026" iyz="0" izz="38.7888167"/>
+      <origin xyz="0.026396913 0 0.258090317" rpy="0 0 0"/>
+      <mass value="95.6607583"/>
+      <inertia ixx="25.0653596" ixy="0" ixz="-1.00161983" iyy="17.1192105" iyz="0" izz="31.9897898"/>
     </inertial>
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>

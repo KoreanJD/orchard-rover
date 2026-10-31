@@ -1,39 +1,37 @@
 === 관절 가동 범위 간섭 검토 (부품 단위, 간섭 > 1 mm³) ===
-부품 84, 홈 접촉 제외 쌍 20
+부품 96, 홈 접촉 제외 쌍 20
 
 [A] 단일 관절 스윕 (10° 간격, 나머지 0): 171 자세, 충돌 0
 
-[B] 조합 자세: 210 자세, 충돌 30 (운용 제약)
+[B] 조합 자세: 210 자세, 충돌 28 (운용 제약)
  B:J1xJ2xJ3: 충돌 14/54
    J1=-180 J2=-20 J3=+0         rover:diff_post↔fore_plate_J3 10933 외 19
    J1=-180 J2=-20 J3=-120       rover:diff_post↔fore_plate_J3 11895 외 19
    J1=-135 J2=-20 J3=+0         rover:diff_bar↔j4_housing 10869 외 10
    J1=-135 J2=-20 J3=-120       rover:rocker_plate_R↔J3_motor 548
-   J1=-90 J2=-20 J3=-120        rover:frame_ref↔j4_housing 40913 외 8
-   J1=-90 J2=+0 J3=-120         rover:frame_ref↔forearm_tube 5451 외 1
-   J1=-45 J2=-20 J3=-120        rover:frame_ref↔j4_housing 564
-   J1=+45 J2=-20 J3=-120        rover:frame_ref↔j4_housing 564
-   J1=+90 J2=-20 J3=-120        rover:frame_ref↔j4_housing 40913 외 8
-   J1=+90 J2=+0 J3=-120         rover:frame_ref↔forearm_tube 5451 외 1
+   J1=-90 J2=-20 J3=-120        J1:base_plate↔j4_motor 22637 외 8
+   J1=-90 J2=+0 J3=-120         J1:base_plate↔forearm_tube 4179 외 1
+   J1=-45 J2=-20 J3=-120        rover:frame_cross_top_F↔j4_housing 520
+   J1=+45 J2=-20 J3=-120        rover:frame_cross_top_F↔j4_housing 520
+   J1=+90 J2=-20 J3=-120        J1:base_plate↔j4_motor 22637 외 8
+   J1=+90 J2=+0 J3=-120         J1:base_plate↔forearm_tube 4179 외 1
    J1=+135 J2=-20 J3=+0         rover:diff_bar↔j4_housing 10869 외 11
-   J1=+135 J2=-20 J3=-120       rover:frame_ref↔J3_ring 2654 외 2
+   J1=+135 J2=-20 J3=-120       rover:frame_rail_top_L↔J3_ring 1461 외 2
    J1=+180 J2=-20 J3=+0         rover:diff_post↔fore_plate_J3 10933 외 19
    J1=+180 J2=-20 J3=-120       rover:diff_post↔fore_plate_J3 11895 외 19
  B:J2xJ3: 충돌 1/68
-   J2=-20 J3=-105               rover:frame_ref↔iso_flange 3974
- B:J3xJ4xJ5: 충돌 15/88
-   J3=-120 J4=+0 J5=-110        rover:frame_ref↔iso_flange 583
-   J3=-120 J4=+0 J5=-88         rover:frame_ref↔iso_flange 1
-   J3=-120 J4=+180 J5=+88       rover:frame_ref↔iso_flange 1
-   J3=-120 J4=+180 J5=+110      rover:frame_ref↔iso_flange 583
-   J3=-120 J4=-90 J5=-110       rover:frame_ref↔j5_motor 168
-   J3=-120 J4=-90 J5=-88        rover:frame_ref↔j5_motor 168
-   J3=-120 J4=-90 J5=-66        rover:frame_ref↔j5_motor 168
-   J3=-120 J4=-90 J5=-44        rover:frame_ref↔j5_motor 168
-   J3=-120 J4=-90 J5=-22        rover:frame_ref↔j5_motor 168
-   J3=-120 J4=-90 J5=+0         rover:frame_ref↔j5_motor 168
-   J3=-120 J4=-90 J5=+22        rover:frame_ref↔j5_motor 168
-   J3=-120 J4=-90 J5=+44        rover:frame_ref↔j5_motor 168
-   J3=-120 J4=-90 J5=+66        rover:frame_ref↔j5_motor 168
-   J3=-120 J4=-90 J5=+88        rover:frame_ref↔j5_motor 168
-   J3=-120 J4=-90 J5=+110       rover:frame_ref↔j5_motor 168
+   J2=-20 J3=-105               rover:frame_cross_low_F↔iso_flange 2008
+ B:J3xJ4xJ5: 충돌 13/88
+   J3=-120 J4=+0 J5=-110        rover:frame_cross_top_F↔iso_flange 583
+   J3=-120 J4=+180 J5=+110      rover:frame_cross_top_F↔iso_flange 583
+   J3=-120 J4=-90 J5=-110       rover:frame_cross_top_F↔j5_motor 168
+   J3=-120 J4=-90 J5=-88        rover:frame_cross_top_F↔j5_motor 168
+   J3=-120 J4=-90 J5=-66        rover:frame_cross_top_F↔j5_motor 168
+   J3=-120 J4=-90 J5=-44        rover:frame_cross_top_F↔j5_motor 168
+   J3=-120 J4=-90 J5=-22        rover:frame_cross_top_F↔j5_motor 168
+   J3=-120 J4=-90 J5=+0         rover:frame_cross_top_F↔j5_motor 168
+   J3=-120 J4=-90 J5=+22        rover:frame_cross_top_F↔j5_motor 168
+   J3=-120 J4=-90 J5=+44        rover:frame_cross_top_F↔j5_motor 168
+   J3=-120 J4=-90 J5=+66        rover:frame_cross_top_F↔j5_motor 168
+   J3=-120 J4=-90 J5=+88        rover:frame_cross_top_F↔j5_motor 168
+   J3=-120 J4=-90 J5=+110       rover:frame_cross_top_F↔j5_motor 168

@@ -17,12 +17,12 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 import cadquery as cq
 
 from orchard_rover.arm_assembly import _cut_y, build_arm, gas_spring_y
-from orchard_rover.rocker_bogie_cad import build_assembly as build_rover
+from orchard_rover.rocker_bogie_cad import HFS5_4040, FrameMember, build_assembly as build_rover, frame_members, make_profile
 from orchard_rover.rocker_bogie_params import SuspensionParams
 from orchard_rover.shoulder_joint import (ADAPTER_T, ShoulderParams, adapter_radius, gas_spring_arm_anchor,
                                           make_gas_spring)
@@ -154,16 +154,45 @@ def make_j1_drive(b: BaseJointParams) -> cq.Workplane:
     return gb.union(motor).union(shaft)
 
 
+def j1_crossmembers(b: BaseJointParams, p: SuspensionParams) -> List[FrameMember]:
+    """J1 베이스 플레이트 받침 크로스멤버 2본 (HFS5-4040, Y 방향, 상단 레일 사이 맞대기)."""
+    inner = 2 * (p.frame_half_w - p.frame_profile / 2) - p.frame_profile
+    return [FrameMember(f"crossmember_{'f' if dx > 0 else 'r'}", "Y", (b.x_mount + dx, 0.0, p.z_frame_top_rail),
+                        inner, 2) for dx in (-b.crossmember_dx, b.crossmember_dx)]
+
+
+def frame_cut_list(b: BaseJointParams, p: SuspensionParams) -> str:
+    """HFS5-4040 절단 목록: 길이별 수량, 끝단 M5 탭·렌치 홀, 총 길이·질량 (카탈로그 1.28 kg/m)."""
+    members = frame_members(p) + j1_crossmembers(b, p)
+    by_len: Dict[float, List[FrameMember]] = {}
+    for m in members:
+        by_len.setdefault(m.length, []).append(m)
+    lines = ["=== 구동체 프레임 절단 목록 — MISUMI HFS5-4040 (5시리즈 40×40, 홈 2열×4면, A6N01SS-T5) ===",
+             f"{'형번':24s} {'수량':>4s}  부재", ]
+    for length in sorted(by_len, reverse=True):
+        ms = by_len[length]
+        lines.append(f"HFS5-4040-{length:<13g} {len(ms):4d}  " + ", ".join(m.name for m in ms))
+    total = sum(m.length for m in members)
+    taps = sum(m.butt_ends for m in members)
+    lines += ["",
+              f"부재 {len(members)} 본, 총 길이 {total / 1000:.2f} m, 질량 {total / 1000 * HFS5_4040['kg_per_m']:.1f} kg",
+              f"맞대기 체결 {taps} 곳: 맞대기 끝단 M5 탭 (코너 구멍 Ø4.2, 대각 2곳), 관통 부재에 렌치 홀 2 → M5 캡 스크류",
+              "  (MISUMI 추가 가공 옵션: 끝단 M 탭 + 렌치 홀 — 위치는 상대 부재 중심선, 주문 시 옵션 코드로 지정)",
+              "  브라켓 미사용: 레일 상면·측면은 베이스 플레이트·피벗 홀더·차동 포스트 체결면",
+              "T너트: HNTT5-5 (M5) — 시리즈 5 홈은 M3~M5 까지"]
+    return "\n".join(lines)
+
+
 def build_j1(b: BaseJointParams, p: SuspensionParams, p2: ShoulderParams) -> Tuple[cq.Assembly, float]:
     """J1 조립체 (구동체 좌표). 반환: (조립체, J2 축 Z)."""
     z0 = z_rail_top(p)
     x = b.x_mount
     asm = cq.Assembly(name="J1_base")
     asm.add(make_base_plate(b).translate((x, 0, z0)), name="base_plate", color=cq.Color(0.85, 0.3, 0.3))
-    # 크로스멤버 2본 (HFS5-4040)
-    for dx in (-b.crossmember_dx, b.crossmember_dx):
-        cm = cq.Workplane("XY").box(40, 720, 40).translate((x + dx, 0, p.z_frame_top_rail))
-        asm.add(cm, name=f"crossmember_{'f' if dx > 0 else 'r'}", color=cq.Color(0.55, 0.55, 0.58))
+    # 크로스멤버 2본 (HFS5-4040, 상단 레일 안쪽 면에 맞대기)
+    for m in j1_crossmembers(b, p):
+        asm.add(make_profile(m.length, m.axis).translate(m.center), name=m.name,
+                color=cq.Color(0.55, 0.55, 0.58))
     asm.add(make_j1_drive(b).translate((x, 0, z0)), name="j1_drive", color=cq.Color(0.2, 0.2, 0.25))
     ib, ob, wb = b.bearing
     brg = cq.Workplane("XY").circle(ob / 2).circle(ib / 2).extrude(wb).translate((x, 0, z0 + b.plate_t - 4))
@@ -214,6 +243,7 @@ def export(out: Path) -> Dict[str, float]:
     out.mkdir(parents=True, exist_ok=True)
     full, info = build_full_robot(0.0)
     full.save(str(out / "orchard_robot_full.step"))
+    (out / "frame_cut_list.txt").write_text(frame_cut_list(BaseJointParams(), SuspensionParams()), encoding="utf-8")
     comp = cq.Workplane().add(full.toCompound())
     views = {"iso": (1, -1.2, 0.8), "side": (0, -1, 0), "front": (1, 0, 0)}
     for n, d in views.items():

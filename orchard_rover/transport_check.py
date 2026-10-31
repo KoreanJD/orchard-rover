@@ -36,7 +36,7 @@ def static_shapes() -> Dict[str, cq.Shape]:
     rover = build_rover(p, 0.0)
     out: Dict[str, cq.Shape] = {}
     for ch in rover.children:
-        if ch.name in ("frame_ref", "diff_post", "diff_bar"):
+        if ch.name.startswith("frame_") or ch.name in ("diff_post", "diff_bar"):
             shp = ch.obj.val() if isinstance(ch.obj, cq.Workplane) else ch.obj
             if ch.loc is not None:
                 shp = shp.moved(ch.loc)

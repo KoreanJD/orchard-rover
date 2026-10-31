@@ -33,7 +33,7 @@ def test_every_part_supported_from_frame(parts) -> None:
             if _bb_overlap(bbs[a], bbs[b], FIT_TOL) and home[a][1].distance(home[b][1]) <= FIT_TOL:
                 adj[a].add(b)
                 adj[b].add(a)
-    seen, stack = {"rover:frame_ref"}, ["rover:frame_ref"]
+    seen, stack = {"rover:frame_rail_low_L"}, ["rover:frame_rail_low_L"]
     while stack:
         for m in adj[stack.pop()] - seen:
             seen.add(m)
