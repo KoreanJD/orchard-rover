@@ -201,9 +201,12 @@ def plate_strength() -> Dict[str, Dict[str, float]]:
 
 
 def tipover(base_mass: float = 60.0, arm_mass: float = 12.0, tool: float = 3.0,
-            half_track: float = 506.0, base_cg_z: float = 450.0,
+            half_track: float = None, base_cg_z: float = 450.0,
             arm_base_z: float = 950.0, slope_deg: float = 15.0) -> Dict[str, float]:
-    """측면 완전 전개 + 횡경사에서 전복 마진."""
+    """측면 완전 전개 + 횡경사에서 전복 마진. half_track 기본값 = 서스펜션 휠 중심 Y."""
+    if half_track is None:
+        from orchard_rover.rocker_bogie_params import SuspensionParams
+        half_track = SuspensionParams().derived["y_wheel_c"]
     reach = 1050.0
     # 팔 CG 는 전개 시 어깨에서 ~0.45 m, 툴은 1.05 m (모두 측방)
     m_over = (tool * reach + arm_mass * 450.0) * G / 1000.0

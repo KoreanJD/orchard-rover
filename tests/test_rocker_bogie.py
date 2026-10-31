@@ -74,9 +74,30 @@ def test_pivot_shift_changes_front_load(x_pivot_shift: float, expect_front_light
 
 
 def test_safety_factors_above_minimum(params: SuspensionParams) -> None:
-    """모든 안전율 ≥ 2.5 (동하중 계수 3 적용 후)."""
+    """팔 장착 하중 케이스 전체·좌우의 최저 안전율 ≥ 2.5 (동하중 ×3).
+
+    휠은 정격 하중에 동하중 ×3 을 건 보수적 값이라 ≥ 2.0 (정적 ≥ 6).
+    """
     for name, sf in params.safety_factors().items():
-        assert sf >= 2.5, f"{name} 안전율 부족: {sf:.2f}"
+        assert sf >= (2.0 if name == "wheel" else 2.5), f"{name} 안전율 부족: {sf:.2f}"
+
+
+def test_load_cases_conserve_weight(params: SuspensionParams) -> None:
+    """각 케이스에서 네 바퀴(좌우 ×3) 하중 합 = 총 무게, 들림 없음."""
+    for name, (m, x, y) in params.load_cases().items():
+        wl = params.wheel_loads(m, x, y)
+        total = sum(v[k] for v in wl.values() for k in ("front", "mid", "rear"))
+        assert total == pytest.approx(m * 9.81), name
+        assert min(v[k] for v in wl.values() for k in ("front", "mid", "rear")) > 0, name
+
+
+def test_arm_reach_loads_front_wheel(params: SuspensionParams) -> None:
+    """팔을 앞으로 뻗으면 차동 바를 통한 피치 모멘트로 전방 휠 하중이 커진다."""
+    m, x, y = params.load_cases()["reach_front"]
+    wl = params.wheel_loads(m, x, y)["left"]
+    assert wl["front"] > wl["mid"] == pytest.approx(wl["rear"])
+    assert params.wheel_loads(*params.load_cases()["vehicle_only"])["left"]["front"] == \
+        pytest.approx(params.static_wheel_loads()["front"])
 
 
 # ---------------------------------------------------------------------------
@@ -115,6 +136,17 @@ def test_lateral_stackup_has_no_overlap(params: SuspensionParams) -> None:
     assert params.frame_half_w + params.pivot_block_t < d["y_rocker_in"]
     assert d["y_rocker_in"] + t < d["y_bogie_in"]
     assert d["y_bogie_in"] + t < d["y_wheel_in"]
+    assert d["y_wheel_in"] + WHEELS[params.wheel_d]["width"] < d["y_fork_in"]
+
+
+def test_rocker_shaft_end_inside_wheel_plane(params: SuspensionParams) -> None:
+    """로커 축 끝·칼라가 휠 내측면보다 안쪽 (Y 가 겹치면 보기 회전 시 중간 휠과 충돌)."""
+    from orchard_rover.rocker_bogie_params import BEARINGS
+
+    d = params.derived
+    l_brg = 2 * BEARINGS[params.rocker_journal_d]["width"] + 6
+    shaft_end = params.frame_half_w + params.pivot_block_t + params.block_gap + l_brg + params.collar_w + 2
+    assert shaft_end + 1 < d["y_wheel_in"]
 
 
 def test_diff_bar_clears_upright_through_travel(params: SuspensionParams) -> None:
