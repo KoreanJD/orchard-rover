@@ -72,7 +72,7 @@ class SuspensionParams:
         plate_t: 로커/보기 플레이트 두께(Al 6061-T6).
         arm_w: 로커/보기 암 폭(측면도 상 높이).
         diff_bar_half_len: 차동 바 중심→링크 연결점 거리(Y).
-        rocker_shaft_d: 로커 피벗 축경 (SHF20 클램프·SCS20 칼라 구간).
+        rocker_shaft_d: 로커 피벗 축경 (SHF20 클램프·PSCS20 칼라 구간).
         rocker_journal_d: 로커 피벗 축 베어링 저널경 (6004ZZ 내경, 축경과 같음).
         bogie_shaft_d: 보기 피벗 축경.
         axle_d: 휠 스터브 액슬 축경.
@@ -104,22 +104,25 @@ class SuspensionParams:
     frame_half_w: float = 400.0   # 프레임 외측면
     frame_len: float = 1000.0
     frame_profile: float = 40.0   # HFS5-4040
-    z_frame_low_rail: float = 300.0
+    # 하단 레일 중심 310: HFS5-4040 은 한 면에 홈 2줄(중심 ±10) → 아래 홈(Z 300)이 로커 피벗 높이
+    z_frame_low_rail: float = 310.0
     z_frame_top_rail: float = 700.0
-    # 로커 피벗 지지: MISUMI SHF20 플랜지형 샤프트 서포트 (표준품, 2홀 Ø7 @48, 레일 한 슬롯 체결)
-    # 카탈로그 W60 / T8 / L20 / B48 / 홀 Ø7 (M6) / 클램프 M5. 보스 Ø·플랜지 높이는 단순화 값
-    shf_flange_t: float = 8.0     # 플랜지 두께 T
-    shf_boss_len: float = 20.0    # 클램프 보스 길이 L
-    shf_flange_w: float = 60.0    # 플랜지 폭 W
-    shf_hole_pitch: float = 48.0  # 볼트 홀 간격 B
-    shf_hole_d: float = 7.0
-    shf_boss_d: float = 34.0
-    shf_flange_h: float = 44.0
-    collar_od: float = 32.0       # SCS20 세트 칼라
+    hfs5_slot_offset: float = 10.0   # HFS5-4040 홈 2줄: 면 중심 ±10, T너트 M3~M5 (HNTT5)
+    # 로커 피벗 지지: MISUMI SHF20 플랜지형 샤프트 홀더 (주조품 AC7A)
+    # 카탈로그 L60 / T20(축방향 전체) / t8(플랜지) / H37 / A34 / L1 48 / d Ø7 / 클램프 M5
+    # 홀 Ø7 은 M6 용이지만 시리즈 5 홈에는 M5 까지라 M5 + 와셔 + HNTT5-5 로 체결
+    shf_flange_t: float = 8.0     # 플랜지 두께 t
+    shf_boss_len: float = 12.0    # 보스 = T − t (T 20 이 축방향 전체 길이)
+    shf_flange_w: float = 60.0    # L
+    shf_hole_pitch: float = 48.0  # L1
+    shf_hole_d: float = 7.0       # d
+    shf_boss_d: float = 34.0      # A
+    shf_flange_h: float = 34.0    # A (플랜지 높이, 단순화: 사각+필렛)
+    collar_od: float = 40.0       # PSCS20-12 세트 칼라 (슬릿, 내경 20 / 외경 40 / 폭 12)
     collar_w: float = 12.0
     block_gap: float = 2.0        # 서포트-로커 플레이트 간 스러스트 와셔 간극
     plate_gap: float = 6.0        # 로커-보기 플레이트 간 와셔 간격
-    wheel_gap: float = 16.0       # 보기 플레이트-휠 내측면 간격 (로커 축 끝·SCS20 칼라보다 휠이 Y 바깥)
+    wheel_gap: float = 16.0       # 보기 플레이트-휠 내측면 간격 (로커 축 끝·PSCS20 칼라보다 휠이 Y 바깥)
     fork_gap: float = 10.0        # 전방 휠 외측면-외측 포크 간격
 
     # ---- 단면 ----
@@ -139,7 +142,7 @@ class SuspensionParams:
     link_rod_d: float = 8.0
 
     # ---- 축 ----
-    rocker_shaft_d: int = 20      # SHF20·SCS20 + 6004ZZ, 단붙이 없는 직선축
+    rocker_shaft_d: int = 20      # SHF20·PSCS20 + 6004ZZ, SFJ20 직선축 (SUJ2)
     rocker_journal_d: int = 20
     bogie_shaft_d: int = 12
     axle_d: int = 16              # 아이들러 스터브 액슬
@@ -341,7 +344,7 @@ class SuspensionParams:
         sigma_out = m_out * (self.plate_t / 2) / i_out
         sf["rocker_bending_outplane"] = self.yield_mpa / sigma_out
 
-        # 로커 피벗 축: SHF20 클램프 중심 → 로커 베어링 쌍 중심 캔틸레버 (SUS304)
+        # 로커 피벗 축: SHF20 클램프 중심 → 로커 베어링 쌍 중심 캔틸레버 (SFJ 는 SUJ2 지만 보수적으로 SUS304 σy)
         y_clamp = self.frame_half_w + self.shf_flange_t + self.shf_boss_len / 2
         brg = BEARINGS[self.rocker_journal_d]
         y_brg = self.derived["y_rocker_in"] + (2 * brg["width"] + 6) / 2
