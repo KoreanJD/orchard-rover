@@ -141,11 +141,11 @@ def test_lateral_stackup_has_no_overlap(params: SuspensionParams) -> None:
 
 def test_rocker_shaft_end_inside_wheel_plane(params: SuspensionParams) -> None:
     """로커 축 끝·칼라가 휠 내측면보다 안쪽 (Y 가 겹치면 보기 회전 시 중간 휠과 충돌)."""
-    from orchard_rover.rocker_bogie_params import BEARINGS
+    from orchard_rover.rocker_bogie_params import BEARING_HOLDERS
 
     d = params.derived
-    l_brg = 2 * BEARINGS[params.rocker_journal_d]["width"] + 6
-    shaft_end = params.frame_half_w + params.pivot_block_t + params.block_gap + l_brg + params.collar_w + 2
+    l_brg = BEARING_HOLDERS[params.rocker_journal_d]["L"]
+    shaft_end = params.frame_half_w + params.pivot_block_t + params.block_gap + l_brg + 1 + params.collar_w + 2
     assert shaft_end + 1 < d["y_wheel_in"]
 
 
@@ -319,3 +319,57 @@ def test_idler_axle_stack_is_retained(params: SuspensionParams) -> None:
         collar = shapes[f"idler_collar_{k}_L"].BoundingBox()
         assert collar.ymax < axle.ymax <= collar.ymax + 2 + 1e-6
         assert shapes[f"wheel_{k}_L"].intersect(shapes[f"wheel_bearing_{k}_L"]).Volume() < 0.01
+
+
+# ---------------------------------------------------------------------------
+# 베어링 보스 → MISUMI BGRBB 베어링 홀더 볼트 체결 (판은 단일 두께 워터젯)
+# ---------------------------------------------------------------------------
+def _placed_shapes(params: SuspensionParams, deg: float = 0.0) -> dict:
+    from orchard_rover.rocker_bogie_cad import build_assembly
+
+    shapes = {}
+
+    def walk(a, loc):
+        for ch in a.children:
+            l = loc * ch.loc if ch.loc is not None else loc
+            if ch.obj is not None:
+                shapes[ch.name] = ch.obj.val().moved(l)
+            walk(ch, l)
+
+    walk(build_assembly(params, math.radians(deg)), cq.Location())
+    return shapes
+
+
+def test_plates_have_no_bosses(params: SuspensionParams) -> None:
+    """로커·보기 판과 차동 바가 단일 두께 (2D 가공만으로 제작)."""
+    from orchard_rover.rocker_bogie_cad import make_bogie_plate, make_diff_bar, make_rocker_plate
+
+    for maker in (make_rocker_plate, make_bogie_plate):
+        bb = maker(params).val().BoundingBox()
+        assert bb.ylen == pytest.approx(params.plate_t)
+    assert make_diff_bar(params).val().BoundingBox().zlen == pytest.approx(params.diff_bar_t)
+
+
+def test_bearing_holders_seat_and_stack(params: SuspensionParams) -> None:
+    """홀더 플랜지가 판에 앉고, 축 위 스페이서·베어링·칼라가 빈틈없이 닿으며 겹치지 않는다."""
+    s = _placed_shapes(params)
+
+    def touch(a, b):
+        assert s[a].distance(s[b]) < 1e-6, (a, b)
+        assert s[a].intersect(s[b]).Volume() < 0.01, (a, b)
+
+    for a, b in (("rocker_holder_L", "rocker_plate_L"), ("bogie_holder_L", "bogie_plate_L"),
+                 ("diff_holder", "diff_bar"), ("rocker_holder_L", "rocker_bearing_L"),
+                 ("bogie_holder_L", "bogie_bearing_L"), ("diff_holder", "diff_bearing")):
+        touch(a, b)
+    # 축 방향 적층 (정지측): SHF20 | 스페이서 | 6004 ×2 | 스페이서 | 칼라, 로커 판 | 스페이서 | 6001 ×2
+    for chain in (["pivot_block_L", "rocker_spacer_in_L", "rocker_bearing_L", "rocker_spacer_out_L", "shaft_collar_L"],
+                  ["rocker_plate_L", "bogie_spacer_L", "bogie_bearing_L"],
+                  ["diff_post", "diff_spacer", "diff_bearing"]):
+        for a, b in zip(chain, chain[1:]):
+            touch(a, b)
+    # 회전측 홀더는 정지측 부품과 간극
+    assert s["rocker_holder_L"].distance(s["pivot_block_L"]) >= params.block_gap - 1e-6
+    assert s["rocker_holder_L"].distance(s["shaft_collar_L"]) >= 1.0 - 1e-6
+    assert s["bogie_holder_L"].distance(s["rocker_plate_L"]) >= 2.0
+    assert s["diff_holder"].distance(s["diff_post"]) >= 2.0 - 1e-6
