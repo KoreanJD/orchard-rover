@@ -134,6 +134,8 @@ class SuspensionParams:
     shf_flange_h: float = 34.0    # A (플랜지 높이, 단순화: 사각+필렛)
     collar_od: float = 40.0       # PSCS20-12 세트 칼라 (슬릿, 내경 20 / 외경 40 / 폭 12)
     collar_w: float = 12.0
+    bogie_collar_od: float = 30.0  # PSCS12-10 세트 칼라 (보기 축 바깥 끝 빠짐 방지, 내경 12 / 외경 30 / 폭 10)
+    bogie_collar_w: float = 10.0
     block_gap: float = 2.0        # SHF20 보스 끝 - 로커 베어링 홀더 플랜지 간극 (내륜 스페이서)
     # 로커-보기 플레이트 간격: 보기 홀더(BGRBB6001, 판 바깥면 플랜지) 몸통이 판 안쪽으로 5 돌출 + 간극 3
     plate_gap: float = 8.0
