@@ -365,7 +365,7 @@ def test_bearing_holders_seat_and_stack(params: SuspensionParams) -> None:
     # 축 방향 적층 (정지측): SHF20 | 스페이서 | 6004 ×2 | 스페이서 | 칼라, 로커 판 | 스페이서 | 6001 ×2 | 스페이서 | 칼라
     for chain in (["pivot_block_L", "rocker_spacer_in_L", "rocker_bearing_L", "rocker_spacer_out_L", "shaft_collar_L"],
                   ["rocker_plate_L", "bogie_spacer_L", "bogie_bearing_L", "bogie_spacer_out_L", "bogie_collar_L"],
-                  ["diff_post", "diff_spacer", "diff_bearing"]):
+                  ["diff_post", "diff_spacer", "diff_bearing", "diff_spacer_top", "diff_ring", "diff_post"]):
         for a, b in zip(chain, chain[1:]):
             touch(a, b)
     # 회전측 홀더는 정지측 부품과 간극
@@ -374,6 +374,9 @@ def test_bearing_holders_seat_and_stack(params: SuspensionParams) -> None:
     assert s["bogie_holder_L"].distance(s["rocker_plate_L"]) >= 2.0
     assert s["bogie_holder_L"].distance(s["bogie_collar_L"]) >= 1.0 - 1e-6
     assert s["diff_holder"].distance(s["diff_post"]) >= 2.0 - 1e-6
+    # 차동 핀: 스냅링이 홀더와 간극, 핀 끝은 홀더 윗면 위 4 이내 (팔 접힘 자세 간섭 방지)
+    assert s["diff_holder"].distance(s["diff_ring"]) >= 1.0 - 1e-6
+    assert s["diff_post"].BoundingBox().zmax <= s["diff_holder"].BoundingBox().zmax + 4 + 1e-6
     # 보기 축: 칼라가 축 끝 안쪽, 칼라·축 끝이 중간 휠 내측면보다 안쪽
     collar, shaft = s["bogie_collar_L"].BoundingBox(), s["bogie_shaft_L"].BoundingBox()
     assert collar.ymax < shaft.ymax <= collar.ymax + 2 + 1e-6

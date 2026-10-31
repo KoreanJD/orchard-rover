@@ -370,7 +370,8 @@ def make_diff_post(p: SuspensionParams) -> cq.Workplane:
     """차동 바 피벗 포스트 — 상부 크로스멤버(HFS5-4040, Y 방향) 위 M5 ×4, Ø12 수직 핀.
 
     체결 홀은 크로스멤버 상면 홈 2줄(X ±10)에 Y ±22 (시리즈 5 T너트는 M5 까지).
-    기둥 끝은 홀더 몸통 아래 2 (내륜 스페이서 자리), 핀은 홀더 윗면 위 4 (멈춤링 자리).
+    기둥 끝은 홀더 몸통 아래 2 (내륜 스페이서 자리), 핀은 홀더 윗면 위 4: 위 1 에서 STWN12 스냅링 홈.
+    (세트 칼라는 핀이 9 길어져 팔을 뒤로 접은 자세에서 J4 하우징과 닿아 스냅링을 쓴다)
     """
     base = p.z_frame_top_rail + p.frame_profile / 2
     col = diff_holder_bottom_z(p) - 2 - base
@@ -379,9 +380,11 @@ def make_diff_post(p: SuspensionParams) -> cq.Workplane:
     slot = p.hfs5_slot_offset
     post = post.cut(cq.Workplane("XY").pushPoints([(sx * slot, sy * 22.0) for sx in (1, -1) for sy in (1, -1)])
                     .circle(2.75).extrude(12).translate((0, 0, -1)))
-    pin_top = p.z_diff_bar + p.diff_bar_t / 2 + BEARING_HOLDERS[12]["T"] + 4
-    pin = cq.Workplane("XY").circle(6).extrude(pin_top - base)
-    return post.union(pin)
+    z_ht = p.z_diff_bar + p.diff_bar_t / 2 + BEARING_HOLDERS[12]["T"]   # 홀더 윗면
+    pin = cq.Workplane("XY").circle(6).extrude(z_ht + 4 - base)
+    groove = (cq.Workplane("XY").circle(6.5).circle(p.diff_ring_groove_d / 2).extrude(p.diff_ring_groove_w)
+              .translate((0, 0, z_ht + 1 - base)))
+    return post.union(pin).cut(groove)
 
 
 def make_link_rod(p: SuspensionParams) -> cq.Workplane:
@@ -650,6 +653,13 @@ def build_assembly(p: SuspensionParams, theta_left: float = 0.0) -> cq.Assembly:
             name="diff_bearing", color=COLORS["pivot"])
     asm.add(make_spacer(p, 2 + hb["l"], 12, 16.0).rotate((0, 0, 0), (1, 0, 0), 90)
             .translate((xd, 0, z_hb - 2)), name="diff_spacer", color=COLORS["pivot"])
+    # 위 베어링 내륜 → 홀더 윗면 + 1 스페이서 | STWN12 스냅링: 차동 바가 핀에서 위로 빠지지 않게
+    z_ht = z_hb + hb["L"]
+    asm.add(make_spacer(p, hb["l"] + 1, 12, 16.0).rotate((0, 0, 0), (1, 0, 0), 90)
+            .translate((xd, 0, z_ht - hb["l"])), name="diff_spacer_top", color=COLORS["pivot"])
+    ring = (cq.Workplane("XY").circle(p.diff_ring_groove_d / 2 + p.diff_ring_b)
+            .circle(p.diff_ring_groove_d / 2).extrude(p.diff_ring_t))
+    asm.add(ring.translate((xd, 0, z_ht + 1)), name="diff_ring", color=COLORS["pivot"])
     for side, th in ((+1.0, theta_left), (-1.0, theta_right)):
         ux, uz = p.upright_top(th)
         uy = side * d["y_rocker_c"]
