@@ -203,10 +203,13 @@ def holder_bearing_gap(bore: int) -> float:
     return hold["L"] - 2 * hold["l"] - 2 * BEARINGS[bore]["width"]
 
 
-def make_shaft_collar(p: SuspensionParams) -> cq.Workplane:
-    """세트 칼라 PSCS20-12 (슬릿, Ø20 축 빠짐 방지)."""
-    return (cq.Workplane("XZ").circle(p.collar_od / 2).circle(p.rocker_shaft_d / 2 + 0.01)
-            .extrude(-p.collar_w))   # 아이들러 축(SFJ20)에도 같은 칼라
+def make_shaft_collar(p: SuspensionParams, bore: float = None, od: float = None,
+                      width: float = None) -> cq.Workplane:
+    """세트 칼라 (슬릿, 축 빠짐 방지) — 기본 PSCS20-12, 보기 축은 PSCS12-10 (+Y 방향 0 → width)."""
+    bore = p.rocker_shaft_d if bore is None else bore   # 아이들러 축(SFJ20)에도 같은 칼라
+    od = p.collar_od if od is None else od
+    width = p.collar_w if width is None else width
+    return cq.Workplane("XZ").circle(od / 2).circle(bore / 2 + 0.01).extrude(-width)
 
 
 def rocker_shaft_length(p: SuspensionParams) -> float:
@@ -229,12 +232,12 @@ def make_rocker_shaft(p: SuspensionParams) -> cq.Workplane:
 
 
 def bogie_shaft_length(p: SuspensionParams) -> float:
-    """보기 축 길이: 로커 판 내측면 → 로커 판 | 간격 | 보기 판 | 홀더 플랜지 T | 10 (멈춤링 자리)."""
-    return 2 * p.plate_t + p.plate_gap + BEARING_HOLDERS[p.bogie_shaft_d]["T"] + 10
+    """보기 축 길이: 로커 판 내측면 → 로커 판 | 간격 | 보기 판 | 홀더 플랜지 T | 1 | PSCS12-10 칼라 | 2."""
+    return 2 * p.plate_t + p.plate_gap + BEARING_HOLDERS[p.bogie_shaft_d]["T"] + 1 + p.bogie_collar_w + 2
 
 
 def make_bogie_shaft(p: SuspensionParams) -> cq.Workplane:
-    """보기 피벗 축 SFJ12 — 로커 플레이트 압입 + 보기 베어링 홀더 (BGRBB6001DD)."""
+    """보기 피벗 축 SFJ12 — 로커 플레이트 압입 + 보기 베어링 홀더 (BGRBB6001DD) + 바깥 끝 PSCS12-10."""
     return cq.Workplane("XZ").circle(p.bogie_shaft_d / 2).extrude(-bogie_shaft_length(p))
 
 
@@ -526,6 +529,11 @@ def _side(p: SuspensionParams, side: float, theta: float,
     # 로커 판 바깥면 → 보기 안쪽 베어링 내륜 스페이서 (로커와 함께 정지)
     rocker_grp["bogie_spacer"] = (
         parts["bogie_spacer"].translate((bx, d["y_rocker_in"] + p.plate_t, bz)), COLORS["pivot"])
+    # 바깥 베어링 내륜 → 홀더 플랜지 면 + 1 스페이서 | PSCS12-10 칼라: 보기 그룹이 축에서 빠지지 않게
+    rocker_grp["bogie_spacer_out"] = (
+        parts["bogie_spacer_out"].translate((bx, y_bogie_out + hb["T"] - hb["l"], bz)), COLORS["pivot"])
+    rocker_grp["bogie_collar"] = (
+        parts["bogie_collar"].translate((bx, y_bogie_out + hb["T"] + 1, bz)), COLORS["pivot"])
     # --- 보기 그룹 (B 기준, 로커 회전 상쇄) ---
     bogie_grp: Dict[str, Tuple[cq.Workplane, cq.Color]] = {
         "bogie_plate": (_place_y(parts["bogie_plate"], d["y_bogie_in"], p.plate_t), COLORS["bogie"]),
@@ -603,6 +611,8 @@ def build_assembly(p: SuspensionParams, theta_left: float = 0.0) -> cq.Assembly:
         "bogie_bearing": make_bearing_pair(p.bogie_shaft_d, holder_bearing_gap(p.bogie_shaft_d)),
         "bogie_spacer": make_spacer(p, p.plate_gap - (hb["L"] - hb["T"] - p.plate_t) + hb["l"],
                                     p.bogie_shaft_d, 16.0),
+        "bogie_spacer_out": make_spacer(p, hb["l"] + 1, p.bogie_shaft_d, 16.0),
+        "bogie_collar": make_shaft_collar(p, p.bogie_shaft_d, p.bogie_collar_od, p.bogie_collar_w),
         "front_fork": make_front_fork(p),
         "standoff": make_standoff(p),
         "axle_holder": make_axle_holder(p),
