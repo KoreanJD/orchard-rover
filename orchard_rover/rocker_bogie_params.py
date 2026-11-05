@@ -136,6 +136,11 @@ class SuspensionParams:
     collar_w: float = 12.0
     bogie_collar_od: float = 30.0  # PSCS12-10 세트 칼라 (보기 축 바깥 끝 빠짐 방지, 내경 12 / 외경 30 / 폭 10)
     bogie_collar_w: float = 10.0
+    # STWN12 축용 C형 스냅링 (차동 핀 위, JIS B 2804): 두께 1, 홈 지름 11.5 · 폭 1.15, 홈-핀 끝 최소 1.5, 링 폭 약 2.1
+    diff_ring_t: float = 1.0
+    diff_ring_groove_d: float = 11.5
+    diff_ring_groove_w: float = 1.15
+    diff_ring_b: float = 2.1
     block_gap: float = 2.0        # SHF20 보스 끝 - 로커 베어링 홀더 플랜지 간극 (내륜 스페이서)
     # 로커-보기 플레이트 간격: 보기 홀더(BGRBB6001, 판 바깥면 플랜지) 몸통이 판 안쪽으로 5 돌출 + 간극 3
     plate_gap: float = 8.0
